@@ -18,6 +18,15 @@ const DAY = 86_400;
 const RETRIEVAL_TOP_K = 10;
 const RERANK_TOP_K = 8;
 const MIN_RERANK_CONFIDENCE = 0.55;
+export const PHOTO_REPEAT_COOLDOWN_MS = 10_000;
+
+/** Deduplicate ASR revisions and brief bursts, not an entire conversation. */
+export function suppressRepeat(suggestions: { photoId: string; createdAt?: string; sourceSegId?: string }[], photoId: string, segId: string | undefined, now: number): boolean {
+  return suggestions.some(s => s.photoId === photoId && (
+    (!!segId && s.sourceSegId === segId) ||
+    (s.createdAt !== undefined && now - Date.parse(s.createdAt) >= 0 && now - Date.parse(s.createdAt) < PHOTO_REPEAT_COOLDOWN_MS)
+  ));
+}
 /** How far back the friend's speech can be and still come through this speaker's mic as echo. */
 const ECHO_WINDOW_MS = 15_000;
 const ECHO_MIN_OVERLAP = 0.7;
@@ -213,9 +222,7 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     return fusePhotoHits(imageGroups, captionGroups, detection.placeHint);
   };
   let hits = await search(range);
-  const suggested = new Set(
-    (await queryPrefix(`CALL#${call.id}`, 'SUGG#')).filter((s) => s.userId === userId).map((s) => `${userId}#${s.photoId}`),
-  );
+  const suggestions = (await queryPrefix<{ userId: string; photoId: string; createdAt?: string; sourceSegId?: string }>(`CALL#${call.id}`, 'SUGG#')).filter(s => s.userId === userId);
   let best = pickHit(hits, env.similarityThreshold, new Set());
   if (!best && (range.fromSec || range.toSec)) {
     hits = await search({});
@@ -267,11 +274,16 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'echo' });
     return { stored: !input.isPartial, outcome: 'echo' };
   }
-  // Repeated references must not promote an unrelated runner-up after the right photo was shown.
-  if (suggested.has(best.key) || Date.now() - receivedAt > 12_000 || (await getCall(call.id)).endedAt) {
+  const photoId = best.key.split('#')[1];
+  // Keep ranking all photos: a duplicate winner must never promote an unrelated runner-up.
+  if (suppressRepeat(suggestions, photoId, input.segId, Date.now())) {
+    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'repeat_cooldown' });
+    return { stored: !input.isPartial, outcome: 'repeat_cooldown' };
+  }
+  if (Date.now() - receivedAt > 12_000 || (await getCall(call.id)).endedAt) {
+    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'stale_or_ended' });
     return { stored: !input.isPartial, outcome: 'suppressed' };
   }
-  const photoId = best.key.split('#')[1];
   const photo = await get(K.photo(userId, photoId));
   if (!photo || photo.status !== 'indexed') return { stored: true, detection };
   const suggestionId = newId('g');
@@ -295,6 +307,7 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     userId,
     photoId,
     query: detection.query,
+    sourceSegId: input.segId,
     confidence: detection.confidence,
     similarity: best.similarity,
     fusionScore: best.metadata.fusionScore,

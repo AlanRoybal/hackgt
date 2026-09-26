@@ -16,7 +16,7 @@ import { detectReference } from '../src/ai/detector.js';
 import { rerankPhotos } from '../src/ai/rerank.js';
 import { queryPhotos } from '../src/lib/vectors.js';
 import { sendToUser } from '../src/lib/ws.js';
-import { handleTranscript } from '../src/lib/references.js';
+import { handleTranscript, suppressRepeat } from '../src/lib/references.js';
 
 const input = { callId: 'c', segId: 's', text: 'I ate ramen in Chinatown in Houston', isPartial: true };
 beforeEach(() => {
@@ -44,7 +44,7 @@ it('passes spoken subject to reranker and suggests partials without auto-sharing
 });
 
 it('does not substitute the skyline when the ramen photo was already suggested', async () => {
-  vi.mocked(queryPrefix).mockResolvedValue([{ userId: 'u', photoId: 'ramen' }] as any);
+  vi.mocked(queryPrefix).mockResolvedValue([{ userId: 'u', photoId: 'ramen', createdAt: new Date().toISOString() }] as any);
   await handleTranscript('u', input);
   expect(sendToUser).not.toHaveBeenCalled();
 });
@@ -106,4 +106,20 @@ it('does not let simultaneous pickup veto both users', async () => {
     key.sk === 'LIVE#f' ? { userId: 'f', text: input.text, at: Date.now() } : { status: 'indexed', s3Key: 'photo' });
   await handleTranscript('u', input);
   expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen' }));
+});
+
+it('suggests the same correct photo again after the cooldown instead of a runner-up', async () => {
+  vi.mocked(queryPrefix).mockResolvedValue([{ userId: 'u', photoId: 'ramen', sourceSegId: 'earlier', createdAt: new Date(Date.now() - 11000).toISOString() }] as any);
+  await handleTranscript('u', input);
+  expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen' }));
+});
+
+it('deduplicates revisions of one utterance but permits a later request', () => {
+  const now = Date.now();
+  const old = [{ photoId: 'ramen', sourceSegId: 'first', createdAt: new Date(now - 30000).toISOString() }];
+  expect(suppressRepeat(old, 'ramen', 'first', now)).toBe(true);
+  expect(suppressRepeat(old, 'ramen', 'second', now)).toBe(false);
+  expect(suppressRepeat([{ photoId: 'ramen', createdAt: new Date(now - 9999).toISOString() }], 'ramen', 'second', now)).toBe(true);
+  expect(suppressRepeat([{ photoId: 'ramen', createdAt: new Date(now - 10000).toISOString() }], 'ramen', 'second', now)).toBe(false);
+  expect(suppressRepeat([{ photoId: 'ramen' }], 'ramen', 'second', now)).toBe(false);
 });
