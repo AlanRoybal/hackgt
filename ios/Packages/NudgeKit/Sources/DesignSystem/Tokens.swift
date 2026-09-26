@@ -97,20 +97,143 @@ public enum Radius {
     public static let sheet: CGFloat = 28
 }
 
+/// Figma "Motion" page / variable collection "Motion". Under Reduce Motion every move, scale and spring
+/// becomes `fade` (opacity only) and idle loops stop; `press` and haptics are unchanged.
 public enum Motion {
-    /// Move / reposition: critically damped (apple-design: 1.0 / 0.4).
-    public static let move = Animation.spring(response: 0.4, dampingFraction: 1.0)
-    /// Sheets, drawers, the nudge banner (0.8 / 0.3).
-    public static let sheet = Animation.spring(response: 0.3, dampingFraction: 0.8)
-    /// Mini-window corner snap after a flick.
+    // MARK: Springs (ease/spring-*)
+
+    /// Spring values, for driving choreography from a clock (`Curve.spring`).
+    public enum Springs {
+        public static var standard: Spring { Spring(response: 0.3, dampingRatio: 0.8) }
+        public static var settle: Spring { Spring(response: 0.4, dampingRatio: 1.0) }
+        public static var snappy: Spring { Spring(response: 0.4, dampingRatio: 0.68) }
+        public static var pop: Spring { Spring(duration: 0.6, bounce: 0.35) }
+        public static var playful: Spring { Spring(duration: 0.9, bounce: 0.5) }
+    }
+
+    /// Banners, sheets, toasts (bounce 0.2).
+    public static let standard = Animation.spring(Springs.standard)
+    /// Moves and repositioning, no overshoot.
+    public static let settle = Animation.spring(Springs.settle)
+    /// Lift / press release (bounce 0.32).
+    public static let snappy = Animation.spring(Springs.snappy)
+    /// Primary action arriving last, chips popping in (bounce 0.35).
+    public static let pop = Animation.spring(Springs.pop)
+    /// Expressive tier only: hero art growing in with overshoot (bounce 0.5).
+    public static let playful = Animation.spring(Springs.playful)
+    /// Press-down to 0.96 and back.
+    public static let press = Animation.easeOut(duration: Durations.press)
+    /// Reduce Motion replacement for everything: a short cross-fade.
+    public static let fade = Animation.easeInOut(duration: Durations.fade)
+
+    /// Same as `settle`.
+    public static let move = settle
+    /// Same as `standard`.
+    public static let sheet = standard
+    /// Mini-window corner snap after a flick (Prototypes page, unchanged).
     public static let snap = Animation.spring(response: 0.4, dampingFraction: 0.8)
-    /// Photo swap in the mini window.
+    /// Photo swap in the mini window (Prototypes page, unchanged).
     public static let photoSwap = Animation.spring(response: 0.35, dampingFraction: 1.0)
-    /// Reduce Motion replacement: a short cross-fade.
-    public static let fade = Animation.easeInOut(duration: 0.2)
 
     public static func resolved(_ animation: Animation, reduceMotion: Bool) -> Animation {
         reduceMotion ? fade : animation
+    }
+
+    // MARK: Timing (duration/*, stagger/*, period/*), seconds
+
+    public enum Durations {
+        public static let press: TimeInterval = 0.12
+        public static let tint: TimeInterval = 0.15
+        public static let fade: TimeInterval = 0.2
+        public static let banner: TimeInterval = 0.3
+        public static let photoSwap: TimeInterval = 0.35
+        public static let move: TimeInterval = 0.4
+        /// Utility screens: each element fades up 8 pt.
+        public static let entranceSubtle: TimeInterval = 0.35
+        /// Onboarding / idle screens: whole choreography settled.
+        public static let entranceExpressive: TimeInterval = 1.25
+        /// Welcome page change: outgoing art stretches to 106% height (ease-in).
+        public static let stretchOut: TimeInterval = 0.25
+        /// Incoming art settles from 106% (ease-out).
+        public static let stretchIn: TimeInterval = 0.4
+        /// In-call header and controls fading away after idle (M18a).
+        public static let chromeHide: TimeInterval = 0.25
+    }
+
+    public enum Stagger {
+        public static let subtle: TimeInterval = 0.03
+        public static let expressive: TimeInterval = 0.08
+    }
+
+    /// Idle loop periods. All are off (static at rest) under Reduce Motion.
+    public enum Period {
+        /// Art ±1.4°, backdrop ∓2.2°.
+        public static let sway: TimeInterval = 6.5
+        /// ±4 pt float and 104% backdrop breathe. The token table rounds this to 3.2 s; the keyframes use 3.25 s.
+        public static let float: TimeInterval = 3.25
+        public static let breathe: TimeInterval = 2.4
+        public static let pulse: TimeInterval = 1.6
+        public static let shimmer: TimeInterval = 1.2
+    }
+
+    // MARK: Curves (ease/*) as pure functions of t, so choreography is unit-testable
+
+    public enum Curve {
+        /// Linear progress of `t` through `start...end`, clamped to 0...1.
+        public static func progress(_ t: Double, from start: Double, to end: Double) -> Double {
+            guard end > start else { return t >= end ? 1 : 0 }
+            return min(max((t - start) / (end - start), 0), 1)
+        }
+
+        /// ease/out-cubic, cubic-bezier(0.33, 1, 0.68, 1): fades and slide-ups.
+        public static func outCubic(_ x: Double) -> Double {
+            let p = 1 - x
+            return 1 - p * p * p
+        }
+
+        /// ease/in-cubic, cubic-bezier(0.32, 0, 0.67, 0): outgoing content only.
+        public static func inCubic(_ x: Double) -> Double { x * x * x }
+
+        /// Reduce Motion's ease-in-and-out.
+        public static func inOutCubic(_ x: Double) -> Double {
+            x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2
+        }
+
+        /// 0 → 1 (with the spring's overshoot) for a spring released at `start`.
+        public static func spring(_ spring: Spring, _ t: Double, from start: Double) -> Double {
+            t <= start ? 0 : spring.value(target: 1.0, time: t - start)
+        }
+
+        /// ease/sine-in-out idle loop: sin(2πt / period), 0 before `start`.
+        public static func oscillate(_ t: Double, period: Double, from start: Double = 0) -> Double {
+            t <= start || period <= 0 ? 0 : sin(2 * .pi * (t - start) / period)
+        }
+    }
+}
+
+/// A clock that can be paused and resumed without jumping, for TimelineView-driven choreography
+/// (idle loops pause while the user touches or the app isn't active).
+public struct MotionClock: Equatable, Sendable {
+    private var banked: TimeInterval = 0
+    private var runningSince: Date?
+
+    public init(startedAt date: Date? = nil) { runningSince = date }
+
+    public var isRunning: Bool { runningSince != nil }
+
+    public mutating func setRunning(_ running: Bool, at date: Date) {
+        guard running != isRunning else { return }
+        if let since = runningSince {
+            banked += max(date.timeIntervalSince(since), 0)
+            runningSince = nil
+        } else {
+            runningSince = date
+        }
+    }
+
+    /// Seconds the clock has run as of `date`.
+    public func time(at date: Date) -> TimeInterval {
+        banked + (runningSince.map { max(date.timeIntervalSince($0), 0) } ?? 0)
     }
 }
 

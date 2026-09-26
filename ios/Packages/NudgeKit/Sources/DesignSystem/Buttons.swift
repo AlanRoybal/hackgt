@@ -52,7 +52,6 @@ public struct NudgeButtonStyle: ButtonStyle {
     let size: NudgeButtonSize
     let fullWidth: Bool
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(_ kind: NudgeButtonKind = .primary, size: NudgeButtonSize = .large, fullWidth: Bool = true) {
         self.kind = kind
@@ -61,19 +60,43 @@ public struct NudgeButtonStyle: ButtonStyle {
     }
 
     public func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let shape = RoundedRectangle(cornerRadius: size == .small ? Radius.chip + 2 : Radius.input + 2, style: .continuous)
+        return configuration.label
             .font(size.font)
             .foregroundStyle(kind.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .padding(.horizontal, size == .small ? Space.s : Space.l)
             .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: size.height)
-            .background(kind.fill.opacity(configuration.isPressed ? 0.75 : 1),
-                        in: RoundedRectangle(cornerRadius: size == .small ? Radius.chip + 2 : Radius.input + 2, style: .continuous))
+            .background {
+                shape.fill(kind.fill.opacity(configuration.isPressed ? 0.75 : 1))
+                    .animation(.easeInOut(duration: Motion.Durations.tint), value: configuration.isPressed)
+            }
             .contentShape(RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .pressFeedback(configuration.isPressed)
             .opacity(isEnabled ? 1 : 0.45)
-            .animation(configuration.isPressed ? nil : Motion.move, value: configuration.isPressed)
+    }
+}
+
+/// Press feedback only, for text-style buttons that bring their own look (e.g. Skip).
+public struct PressFeedbackButtonStyle: ButtonStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.easeInOut(duration: Motion.Durations.tint), value: configuration.isPressed)
+            .contentShape(Rectangle())
+            .pressFeedback(configuration.isPressed)
+    }
+}
+
+extension View {
+    /// Figma "Press feedback": every tappable surface scales to 96% on touch-down (0.12 s ease-out) and springs
+    /// back on release (snappy). Kept under Reduce Motion: it's feedback, not decoration.
+    public func pressFeedback(_ isPressed: Bool, scale: CGFloat = 0.96) -> some View {
+        scaleEffect(isPressed ? scale : 1)
+            .animation(isPressed ? Motion.press : Motion.snappy, value: isPressed)
     }
 }
 
@@ -143,7 +166,6 @@ public struct CallControlButton: View {
 
 struct RoundCallStyle: ButtonStyle {
     let role: CallControlButton.Role
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let (fill, ink): (Color, Color) = switch role {
@@ -153,8 +175,10 @@ struct RoundCallStyle: ButtonStyle {
         }
         return configuration.label
             .foregroundStyle(ink)
-            .background(fill.opacity(configuration.isPressed ? 0.7 : 1), in: Circle())
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
-            .animation(configuration.isPressed ? nil : Motion.move, value: configuration.isPressed)
+            .background {
+                Circle().fill(fill.opacity(configuration.isPressed ? 0.7 : 1))
+                    .animation(.easeInOut(duration: Motion.Durations.tint), value: configuration.isPressed)
+            }
+            .pressFeedback(configuration.isPressed, scale: 0.92) // Figma M18a: in-call controls press deeper
     }
 }

@@ -8,18 +8,20 @@ public struct AvatarView: View {
     let url: URL?
     let size: CGFloat
     let ring: Bool
+    let ringOpacity: Double
     let seed: String
 
-    public init(name: String, url: URL? = nil, size: CGFloat = 40, ring: Bool = false, seed: String? = nil) {
+    public init(name: String, url: URL? = nil, size: CGFloat = 40, ring: Bool = false, ringOpacity: Double = 1, seed: String? = nil) {
         self.name = name
         self.url = url
         self.size = size
         self.ring = ring
+        self.ringOpacity = ringOpacity
         self.seed = seed ?? name
     }
 
-    public init(user: PublicUser, name: String? = nil, size: CGFloat = 40, ring: Bool = false) {
-        self.init(name: name ?? user.displayName, url: user.avatarUrl, size: size, ring: ring, seed: user.id)
+    public init(user: PublicUser, name: String? = nil, size: CGFloat = 40, ring: Bool = false, ringOpacity: Double = 1) {
+        self.init(name: name ?? user.displayName, url: user.avatarUrl, size: size, ring: ring, ringOpacity: ringOpacity, seed: user.id)
     }
 
     var initials: String {
@@ -34,7 +36,7 @@ public struct AvatarView: View {
         let gap = ring ? max(3, size * 0.07) : 0
         let inner = size - gap * 2
         ZStack {
-            if ring { Circle().strokeBorder(Palette.mintStrong, lineWidth: max(2, size * 0.045)) }
+            if ring { Circle().strokeBorder(Palette.mintStrong, lineWidth: max(2, size * 0.045)).opacity(ringOpacity) }
             ZStack {
                 Circle().fill(tint.fill)
                 Text(initials)
@@ -60,20 +62,32 @@ public struct AvatarPair: View {
     let right: (name: String, url: URL?, seed: String)
     let size: CGFloat
     let borderColor: Color
+    let spread: CGFloat
+    let leftScale: CGFloat
+    let rightScale: CGFloat
 
-    public init(me: PublicUser?, friend: PublicUser, friendName: String, size: CGFloat = 40, borderColor: Color = Palette.surface) {
+    /// `spread` pushes each avatar outward (they nudge together as it animates to 0); the scales let each breathe.
+    public init(me: PublicUser?, friend: PublicUser, friendName: String, size: CGFloat = 40, borderColor: Color = Palette.surface,
+                spread: CGFloat = 0, leftScale: CGFloat = 1, rightScale: CGFloat = 1) {
         left = (me?.displayName ?? "Me", me?.avatarUrl, me?.id ?? "me")
         right = (friendName, friend.avatarUrl, friend.id)
         self.size = size
         self.borderColor = borderColor
+        self.spread = spread
+        self.leftScale = leftScale
+        self.rightScale = rightScale
     }
 
     public var body: some View {
         HStack(spacing: -size * 0.28) {
             AvatarView(name: left.name, url: left.url, size: size, seed: left.seed)
                 .overlay(Circle().strokeBorder(borderColor, lineWidth: 3))
+                .scaleEffect(leftScale)
+                .offset(x: -spread)
             AvatarView(name: right.name, url: right.url, size: size, seed: right.seed)
                 .overlay(Circle().strokeBorder(borderColor, lineWidth: 3))
+                .scaleEffect(rightScale)
+                .offset(x: spread)
         }
         .accessibilityHidden(true)
     }
@@ -85,9 +99,12 @@ public struct FriendRow: View {
     let friend: Friend
     let status: String
     let statusTint: Color
+    let pulse: Double
 
-    public init(friend: Friend, now: Date = Date()) {
+    /// `pulse` is the free ring / status dot opacity (they breathe while the friend is free).
+    public init(friend: Friend, now: Date = Date(), pulse: Double = 1) {
         self.friend = friend
+        self.pulse = pulse
         if friend.freeNow {
             if let until = friend.freeUntil {
                 status = "Free until \(until.formatted(date: .omitted, time: .shortened))"
@@ -106,11 +123,11 @@ public struct FriendRow: View {
 
     public var body: some View {
         HStack(spacing: Space.s) {
-            AvatarView(user: friend.user, name: friend.name, size: 44, ring: friend.freeNow)
+            AvatarView(user: friend.user, name: friend.name, size: 44, ring: friend.freeNow, ringOpacity: pulse)
             VStack(alignment: .leading, spacing: 2) {
                 Text(friend.name).font(Typography.friendName).foregroundStyle(Palette.ink)
                 HStack(spacing: Space.xxs) {
-                    if friend.freeNow { Circle().fill(Palette.mintStrong).frame(width: 6, height: 6) }
+                    if friend.freeNow { Circle().fill(Palette.mintStrong).frame(width: 6, height: 6).opacity(pulse) }
                     Text(status).font(.subheadline).foregroundStyle(statusTint)
                 }
             }
@@ -272,42 +289,54 @@ public struct EmptyStateView: View {
     }
 
     public var body: some View {
-        VStack(spacing: Space.m) {
-            Illustration(illustration).frame(width: 150, height: 110)
-            VStack(spacing: Space.xs) {
-                Text(title).font(Typography.title).foregroundStyle(Palette.ink).multilineTextAlignment(.center)
-                Text(message).font(.body).foregroundStyle(Palette.inkSecondary).multilineTextAlignment(.center)
+        // Figma M27a/d: the block fades up 12 pt, then the art floats and sways against its backdrop.
+        MotionTimeline(loops: true) { beat in
+            VStack(spacing: Space.m) {
+                IdleArt(beat: beat, idleFrom: Self.idleFrom) {
+                    Illustration(illustration).frame(width: 150, height: 110)
+                } backdrop: {
+                    Ellipse().fill(Palette.surfaceAlt).frame(width: 190, height: 130)
+                }
+                .frame(width: 190, height: 130)
+                VStack(spacing: Space.xs) {
+                    Text(title).font(Typography.title).foregroundStyle(Palette.ink).multilineTextAlignment(.center)
+                    Text(message).font(.body).foregroundStyle(Palette.inkSecondary).multilineTextAlignment(.center)
+                }
+                if let actionTitle, let action {
+                    NudgeButton(actionTitle, kind: .primary, size: .medium, fullWidth: false, action: action).padding(.top, Space.xs)
+                }
             }
-            if let actionTitle, let action {
-                NudgeButton(actionTitle, kind: .primary, size: .medium, fullWidth: false, action: action).padding(.top, Space.xs)
-            }
+            .motionLayer(beat.fadeUp(at: 0, fade: Motion.Durations.entranceSubtle, rise: Motion.Durations.entranceSubtle))
         }
         .padding(.horizontal, Space.xl)
         .frame(maxWidth: .infinity)
     }
+
+    static let idleFrom = Motion.Durations.entranceSubtle
 }
 
+/// Loading placeholder. Rows pulse 100 → 55% every 1.2 s, each 0.08 s behind the one above (a top-to-bottom
+/// wave). Reduce Motion: static at 70%.
 public struct SkeletonRow: View {
-    @State private var dim = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let index: Int
 
-    public init() {}
+    public init(index: Int = 0) { self.index = index }
 
     public var body: some View {
-        HStack(spacing: Space.s) {
-            Circle().fill(Palette.surfaceAlt).frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: Space.xs) {
-                RoundedRectangle(cornerRadius: 4).fill(Palette.surfaceAlt).frame(width: 140, height: 12)
-                RoundedRectangle(cornerRadius: 4).fill(Palette.surfaceAlt).frame(width: 90, height: 10)
+        MotionTimeline(settlesAt: 0, loops: true) { beat in
+            HStack(spacing: Space.s) {
+                Circle().fill(Palette.surfaceAlt).frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    RoundedRectangle(cornerRadius: 4).fill(Palette.surfaceAlt).frame(width: 140, height: 12)
+                    RoundedRectangle(cornerRadius: 4).fill(Palette.surfaceAlt).frame(width: 90, height: 10)
+                }
+                Spacer()
             }
-            Spacer()
+            .padding(.vertical, Space.s)
+            .opacity(beat.reduceMotion ? 0.7
+                : IdleMotion.dim(beat.t, period: Motion.Period.shimmer, low: 0.55, offset: Motion.Stagger.expressive * Double(index)))
         }
-        .padding(.vertical, Space.s)
-        .opacity(dim ? 0.55 : 1)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dim = true }
-        }
+        .accessibilityElement()
         .accessibilityLabel("Loading")
     }
 }
