@@ -5,11 +5,11 @@ import { choosePairs, rankPairs } from '../src/engine/pairChoice.js';
 
 describe('nudge copy', () => {
   it('matches the product copy', () => {
-    expect(nudgeCopy('Mom', 12).body).toBe('You and Mom are both free for the next 10 minutes. Call?');
-    expect(nudgeCopy('Mom', 17, 'the physics exam').body).toBe('You and Mom are both free for 15 minutes. Want to follow up about the physics exam?');
-    expect(nudgeCopy('Mom', 75).body).toBe('You and Mom are both free for the next hour. Call?');
-    expect(nudgeCopy('Mom', 60, 'the trip').body).toBe('You and Mom are both free for the next hour. Want to follow up about the trip?');
-    expect(nudgeCopy('Mom', 12).title).toBe('Mom is free too');
+    expect(nudgeCopy('Mom', 12).body).toBe('Your calendars look open for the next 10 minutes. Call?');
+    expect(nudgeCopy('Mom', 17, 'the physics exam').body).toBe('Your calendars look open for 15 minutes. Want to follow up about the physics exam?');
+    expect(nudgeCopy('Mom', 75).body).toBe('Your calendars look open for the next hour. Call?');
+    expect(nudgeCopy('Mom', 60, 'the trip').body).toBe('Your calendars look open for the next hour. Want to follow up about the trip?');
+    expect(nudgeCopy('Mom', 12).title).toBe('A moment to catch up with Mom?');
   });
   it('rounds down to 5 with a floor of 5', () => {
     expect(durationPhrase(9, true)).toBe('the next 5 minutes');

@@ -1,3 +1,4 @@
+import { adaptiveDecision } from '../engine/adaptive.js';
 // Nudge matcher: finds mutual free windows, applies suppression + frequency, and sends nudges (SPEC NUD-1..7).
 import { nudgeCopy } from '../engine/copy.js';
 import { pairAllows, within24h } from '../engine/frequency.js';
@@ -87,7 +88,7 @@ export async function runMatcher(opts: MatcherOptions = {}): Promise<MatcherResu
       continue;
     }
     const topic = await dueTopic(f.pairKey, now);
-    candidates.push({ pairKey: f.pairKey, a: f.a, b: f.b, hasDueTopic: !!topic, lastCallAt: f.lastCallAt, minutes: w.minutes, end: w.end, topic });
+    candidates.push({ timingPreference: Math.min(adaptiveDecision(ua.adaptive, ua.tz, now).preference, adaptiveDecision(ub.adaptive, ub.tz, now).preference), pairKey: f.pairKey, a: f.a, b: f.b, hasDueTopic: !!topic, lastCallAt: f.lastCallAt, minutes: w.minutes, end: w.end, topic });
   }
 
   for (const c of choosePairs(candidates)) {

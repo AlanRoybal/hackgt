@@ -7,6 +7,9 @@ import { K } from './keys.js';
 import { presignGet } from './s3.js';
 
 export interface UserItem {
+  adaptive?: import('../engine/adaptive.js').AdaptiveHistory;
+  adaptiveVersion?: number;
+  nudgePausedUntil?: string;
   pk: string;
   sk: string;
   id: string;

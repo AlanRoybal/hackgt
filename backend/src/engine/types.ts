@@ -43,6 +43,8 @@ export interface Availability {
 }
 
 export interface EngineUser {
+  adaptive?: import('./adaptive.js').AdaptiveHistory;
+  nudgePausedUntil?: string;
   id: string;
   tz: string;
   settings: Settings;

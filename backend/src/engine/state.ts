@@ -10,7 +10,7 @@ export interface MachineNudge {
 export type NudgeEvent =
   | { type: 'sent' }
   | { type: 'precheck_failed' }
-  | { type: 'respond'; userId: string; action: 'accept' | 'skip' | 'less' }
+  | { type: 'respond'; userId: string; action: 'accept' | 'skip' | 'less' | 'pause' }
   | { type: 'expire' }
   | { type: 'cancel'; userId: string }
   | { type: 'join' }
