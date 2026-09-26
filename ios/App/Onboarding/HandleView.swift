@@ -38,7 +38,7 @@ struct HandleView: View {
                 VStack(alignment: .leading, spacing: Space.xs) {
                     Text("Handle").font(.footnote.weight(.semibold)).foregroundStyle(Palette.inkSecondary)
                     HStack(spacing: 0) {
-                        Text("@").foregroundStyle(Palette.inkTertiary)
+                        Text("@").foregroundStyle(Palette.inkTertiary).padding(.trailing, Space.xs)
                         TextField("yourname", text: $handle)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                             .textContentType(.username)
@@ -48,9 +48,10 @@ struct HandleView: View {
                     .textFieldStyle(PlainTextFieldStyle())
                     .font(.body)
                     .padding(.horizontal, Space.m)
-                    .frame(minHeight: 52)
+                    .frame(minHeight: 50)
                     .background(Palette.surfaceAlt, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous).strokeBorder(borderColor, lineWidth: 1.5))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous)
+                        .strokeBorder(NudgeTextFieldStyle.borderColor(fieldState), lineWidth: NudgeTextFieldStyle.borderWidth(fieldState)))
                     statusText
                 }
 
@@ -100,15 +101,15 @@ struct HandleView: View {
         switch check {
         case .available: Text("@\(HandleRule.normalize(handle)) is available").font(.footnote).foregroundStyle(Palette.mintStrong)
         case .problem(let m): Text(m).font(.footnote).foregroundStyle(Palette.roseStrong)
-        default: Text("3–20 letters, numbers, underscores or periods.").font(.footnote).foregroundStyle(Palette.inkTertiary)
+        default: Text("3–20 letters, numbers, underscores or periods.").font(.footnote).foregroundStyle(Palette.inkSecondary)
         }
     }
 
-    var borderColor: Color {
+    var fieldState: NudgeTextFieldStyle.State {
         switch check {
-        case .available: Palette.mintStrong
-        case .problem: Palette.roseStrong
-        default: focused == .handle ? Palette.lavenderStrong : .clear
+        case .available: .valid
+        case .problem: .error
+        default: focused == .handle ? .focused : .normal
         }
     }
 
@@ -182,7 +183,7 @@ private struct AvatarPickerLabel: View, Sendable {
             if let image {
                 Image(uiImage: image).resizable().scaledToFill().frame(width: 96, height: 96).clipShape(Circle())
             } else {
-                AvatarView(name: name, size: 96, seed: seed)
+                AvatarView(name: name, size: AvatarSize.hero, seed: seed)
             }
             Image(systemName: "camera.fill").font(.footnote.weight(.semibold))
                 .foregroundStyle(Palette.lavenderStrong)

@@ -22,7 +22,7 @@ struct FriendsView: View {
                                 Image(systemName: "person.crop.circle.badge.plus").font(.headline)
                                 Text(requestsLabel).font(.subheadline.weight(.semibold))
                                 Spacer()
-                                Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
+                                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).accessibilityHidden(true)
                             }
                             .foregroundStyle(Palette.skyStrong)
                             .padding(.horizontal, Space.m).padding(.vertical, Space.s)
@@ -58,10 +58,15 @@ struct FriendsView: View {
                 }
             }
             .navigationDestination(for: String.self) { FriendProfileView(friendId: $0) }
-            .sheet(isPresented: $showAdd) { AddFriendsView() }
-            .sheet(isPresented: $showRequests) { FriendRequestsView() }
+            .sheet(isPresented: $showAdd) { AddFriendsView().nudgeSheet() }
+            .sheet(isPresented: $showRequests) { FriendRequestsView().nudgeSheet() }
             .task { if !app.isPreview { await app.friends.load() } }
             .onChange(of: app.pendingAddHandle) { _, h in if h != nil { showAdd = true } }
+            .onChange(of: app.homeResetCount) {
+                path = []
+                showAdd = false
+                showRequests = false
+            }
         }
     }
 
@@ -118,7 +123,7 @@ struct FriendsList: View {
                                     FriendRow(friend: f, pulse: pulse(beat, f)).padding(.horizontal, Space.m)
                                 }
                                 .buttonStyle(.plain)
-                                if i < friends.count - 1 { RowDivider().padding(.leading, 56) }
+                                if i < friends.count - 1 { RowDivider(inset: RowMetrics.friendDividerInset) }
                             }
                             .motionLayer(rowIn(beat, freeNow.count + i))
                         }
@@ -136,10 +141,10 @@ struct FreeNowCard: View {
 
     var body: some View {
         VStack(spacing: Space.xs) {
-            AvatarView(user: friend.user, name: friend.name, size: 56, ring: true, ringOpacity: pulse)
+            AvatarView(user: friend.user, name: friend.name, size: AvatarSize.large, ring: true, ringOpacity: pulse)
             Text(friend.name).font(Typography.friendName).foregroundStyle(Palette.ink).lineLimit(1)
-            Text(friend.freeUntil.map { "until \($0.formatted(date: .omitted, time: .shortened))" } ?? "free now")
-                .font(.caption.weight(.medium)).foregroundStyle(Palette.mintStrong)
+            Text(friend.freeUntil.map { "Until \($0.formatted(date: .omitted, time: .shortened))" } ?? "Free now")
+                .font(.footnote.weight(.semibold)).foregroundStyle(Palette.mintStrong)
         }
         .frame(width: typeSize.isAccessibilitySize ? 220 : 104)
         .padding(.vertical, Space.m)
@@ -187,8 +192,10 @@ struct AddFriendsView: View {
                                            actionTitle: "Check contacts") { Task { await app.friends.matchContacts() } }
                                 .padding(.top, Space.l)
                         } else {
-                            SectionHeader("\(app.friends.contactMatches.count) of your contacts use Nudge")
-                            UserResultsList(results: app.friends.contactMatches)
+                            VStack(alignment: .leading, spacing: Space.s) {
+                                SectionHeader("\(app.friends.contactMatches.count) of your contacts use Nudge")
+                                UserResultsList(results: app.friends.contactMatches)
+                            }
                         }
                     case .invite:
                         InviteCard()
@@ -201,6 +208,7 @@ struct AddFriendsView: View {
             .navigationTitle("Add friends")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .scrollDismissesKeyboard(.interactively)
             .onAppear {
                 segment = initialSegment
                 if !initialQuery.isEmpty { query = initialQuery }
@@ -271,16 +279,17 @@ struct FriendRequestsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.l) {
                     if !app.friends.requests.incoming.isEmpty {
+                        VStack(alignment: .leading, spacing: Space.s) {
                         SectionHeader("Incoming")
                         CardList {
                             let list = app.friends.requests.incoming
                             ForEach(Array(list.enumerated()), id: \.element.id) { i, r in
                                 HStack(spacing: Space.s) {
-                                    AvatarView(user: r.user, size: 44)
+                                    AvatarView(user: r.user, size: AvatarSize.large)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(r.user.displayName).font(Typography.friendName).foregroundStyle(Palette.ink)
                                         Text("@\(r.user.handle) · \(r.createdAt.formatted(.relative(presentation: .named)))")
-                                            .font(.subheadline).foregroundStyle(Palette.inkSecondary)
+                                            .font(.footnote).foregroundStyle(Palette.inkSecondary).lineLimit(1)
                                     }
                                     Spacer()
                                     Button { Task { await app.friends.decline(r.user.id) } } label: {
@@ -292,29 +301,32 @@ struct FriendRequestsView: View {
                                         Task { await app.friends.accept(r.user.id) }
                                     }
                                 }
-                                .padding(.horizontal, Space.m).padding(.vertical, Space.s)
-                                if i < list.count - 1 { RowDivider() }
+                                .padding(.horizontal, Space.m).padding(.vertical, 10)
+                                if i < list.count - 1 { RowDivider(inset: RowMetrics.friendDividerInset) }
                             }
+                        }
                         }
                     }
                     if !app.friends.requests.outgoing.isEmpty {
+                        VStack(alignment: .leading, spacing: Space.s) {
                         SectionHeader("Sent")
                         CardList {
                             let list = app.friends.requests.outgoing
                             ForEach(Array(list.enumerated()), id: \.element.id) { i, r in
                                 HStack(spacing: Space.s) {
-                                    AvatarView(user: r.user, size: 44)
+                                    AvatarView(user: r.user, size: AvatarSize.large)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(r.user.displayName).font(Typography.friendName).foregroundStyle(Palette.ink)
-                                        Text("@\(r.user.handle)").font(.subheadline).foregroundStyle(Palette.inkSecondary)
+                                        Text("Request sent").font(.footnote).foregroundStyle(Palette.inkSecondary)
                                     }
                                     Spacer()
-                                    Button("Cancel") { Task { await app.friends.cancel(r.user.id) } }
-                                        .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.inkSecondary)
+                                    SubtleButton("Cancel") { Task { await app.friends.cancel(r.user.id) } }
+                                        .accessibilityLabel("Cancel request to \(r.user.displayName)")
                                 }
-                                .padding(.horizontal, Space.m).padding(.vertical, Space.s)
-                                if i < list.count - 1 { RowDivider() }
+                                .padding(.horizontal, Space.m).padding(.vertical, 10)
+                                if i < list.count - 1 { RowDivider(inset: RowMetrics.friendDividerInset) }
                             }
+                        }
                         }
                     }
                     if app.friends.requests.incoming.isEmpty && app.friends.requests.outgoing.isEmpty {

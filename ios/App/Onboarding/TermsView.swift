@@ -39,11 +39,7 @@ struct TermsView: View {
                 VStack(spacing: Space.s) {
                     ForEach(points) { p in
                         HStack(alignment: .top, spacing: Space.m) {
-                            Image(systemName: p.icon)
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(p.tint.strong)
-                                .frame(width: 40, height: 40)
-                                .background(p.tint.fill, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+                            IconTile(p.icon, tint: p.tint, size: AvatarSize.medium)
                             VStack(alignment: .leading, spacing: Space.xxs) {
                                 Text(p.title).font(.headline).foregroundStyle(Palette.ink)
                                 Text(p.body).font(.subheadline).foregroundStyle(Palette.inkSecondary)
@@ -79,7 +75,7 @@ struct TermsView: View {
             .padding(.vertical, Space.s)
             .background(Palette.bg)
         }
-        .sheet(isPresented: $showFull) { FullTermsView() }
+        .sheet(isPresented: $showFull) { FullTermsView().nudgeSheet() }
     }
 }
 

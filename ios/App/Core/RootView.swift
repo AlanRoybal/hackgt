@@ -62,7 +62,7 @@ struct LaunchView: View {
                             opacity: C.outCubic(C.progress(t, from: 0, to: 0.2)),
                             scale: 0.25 + 0.75 * C.spring(Motion.Springs.playful, t, from: 0)))
                     Text("Nudge")
-                        .font(.system(.largeTitle, design: .rounded, weight: .semibold)).tracking(-0.6)
+                        .font(Typography.largeTitle).tracking(-0.6)
                         .foregroundStyle(Palette.ink)
                         .motionLayer(beat.fadeUp(at: 0.45))
                 }
@@ -187,9 +187,11 @@ struct ToastOverlay: View {
     var body: some View {
         ZStack {
             if let toast = app.nudges.toast {
-                ToastView(text: toast.text, actionTitle: toast.actionTitle) {
+                ToastView(text: toast.text, systemImage: toast.actionTitle == nil ? "checkmark.circle.fill" : "hand.thumbsdown",
+                          actionTitle: toast.actionTitle) {
                     Task { await app.nudges.undoLess() }
                 }
+                .padding(.horizontal, Space.margin)
                 .padding(.bottom, 88)
                 // Figma M15c: rises 24 pt on the standard spring, holds 4 s, fades out over 0.2 s.
                 .transition(.asymmetric(

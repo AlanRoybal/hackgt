@@ -15,13 +15,13 @@ struct SettingsView: View {
                     if let me = app.session.me?.user {
                         NavigationLink { AccountSettingsView() } label: {
                             HStack(spacing: Space.m) {
-                                AvatarView(user: me.publicUser, size: 56)
+                                AvatarView(user: me.publicUser, size: AvatarSize.large)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(me.displayName).font(Typography.friendName).foregroundStyle(Palette.ink)
                                     Text("@\(me.handle)").font(.subheadline).foregroundStyle(Palette.inkSecondary)
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.inkTertiary)
+                                Chevron()
                             }
                             .nudgeCard()
                         }
@@ -29,17 +29,15 @@ struct SettingsView: View {
                     }
                     CardList {
                         SettingsLink(icon: "bell.badge.fill", tint: .lavender, title: "Nudges", value: app.settings.settings.frequency.title) { NudgeSettingsView() }
-                        RowDivider().padding(.leading, 52)
+                        RowDivider(inset: RowMetrics.iconDividerInset)
                         SettingsLink(icon: "calendar", tint: .sky, title: "Calendars", value: "Apple") { CalendarSettingsView() }
-                        RowDivider().padding(.leading, 52)
+                        RowDivider(inset: RowMetrics.iconDividerInset)
                         SettingsLink(icon: "photo.on.rectangle", tint: .butter, title: "Photos", value: app.settings.settings.photoMode.title) { PhotoSettingsView() }
-                        RowDivider().padding(.leading, 52)
+                        RowDivider(inset: RowMetrics.iconDividerInset)
                         SettingsLink(icon: "sparkles", tint: .mint, title: "Memory", value: app.settings.settings.memoryEnabled ? "On" : "Off") { MemorySettingsView() }
                     }
                     CardList {
-                        SettingsLink(icon: "person.crop.circle", tint: .peach, title: "Account", value: nil) { AccountSettingsView() }
-                        RowDivider().padding(.leading, 52)
-                        SettingsLink(icon: "doc.text", tint: .rose, title: "Terms & Privacy", value: nil) { FullTermsView.Page() }
+                        SettingsLink(icon: "doc.text", tint: .sky, title: "Terms & Privacy", value: nil) { FullTermsView.Page() }
                     }
                     Text("Nudge \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                         .font(.caption).foregroundStyle(Palette.inkTertiary)
@@ -50,6 +48,8 @@ struct SettingsView: View {
             .nudgeBackground()
             .navigationTitle("Settings")
         }
+        // Returning home pops Settings back to its root.
+        .id(app.homeResetCount)
     }
 }
 
@@ -64,15 +64,15 @@ struct SettingsLink<Destination: View>: View {
     var body: some View {
         NavigationLink(destination: destination) {
             HStack(spacing: Space.s) {
-                Image(systemName: icon).font(.subheadline.weight(.semibold)).foregroundStyle(tint.strong)
-                    .frame(width: 30, height: 30).background(tint.fill, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                IconTile(icon, tint: tint)
                 Text(title).font(.body).foregroundStyle(Palette.ink)
                 Spacer()
                 if let value, !typeSize.isAccessibilitySize { Text(value).font(.body).foregroundStyle(Palette.inkSecondary) }
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.inkTertiary)
+                Chevron()
             }
             .padding(.horizontal, Space.m)
-            .frame(minHeight: 52)
+            .padding(.vertical, Space.s)
+            .frame(minHeight: RowMetrics.minHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -129,15 +129,12 @@ struct NudgeSettingsView: View {
         SettingsPage(title: "Nudges") {
             VStack(alignment: .leading, spacing: Space.s) {
                 SectionHeader("How often")
-                VStack(alignment: .leading, spacing: Space.s) {
-                    Picker("Frequency", selection: binding(\.frequency)) {
-                        ForEach(Frequency.allCases, id: \.self) { Text($0.title) }
-                    }
-                    .pickerStyle(.segmented)
-                    Text(store.settings.frequency.explanation).font(.footnote).foregroundStyle(Palette.inkSecondary)
-                        .animation(nil, value: store.settings.frequency)
+                Picker("Frequency", selection: binding(\.frequency)) {
+                    ForEach(Frequency.allCases, id: \.self) { Text($0.title) }
                 }
-                .nudgeCard()
+                .pickerStyle(.segmented)
+                Text(store.settings.frequency.explanation).font(.footnote).foregroundStyle(Palette.inkSecondary)
+                    .animation(nil, value: store.settings.frequency)
             }
 
             VStack(alignment: .leading, spacing: Space.s) {
@@ -149,7 +146,7 @@ struct NudgeSettingsView: View {
                     TimeRow(title: "Ends", selection: Binding(get: { SettingsStore.date(from: store.settings.quietEnd) },
                                                              set: { d in store.update { $0.quietEnd = SettingsStore.hhmm(from: d) } }))
                 }
-                Text("No nudges during these hours, in your time zone.").font(.footnote).foregroundStyle(Palette.inkTertiary)
+                Text("No nudges during these hours, in your time zone.").font(.footnote).foregroundStyle(Palette.inkSecondary)
             }
 
             VStack(alignment: .leading, spacing: Space.s) {
@@ -184,11 +181,10 @@ struct NudgeSettingsView: View {
                     HStack {
                         Spacer(minLength: 48)
                         Text("Can't right now, I'll call you soon!")
-                            .font(.subheadline).foregroundStyle(Palette.lavenderStrong)
-                            .padding(.horizontal, 14).padding(.vertical, 10)
-                            .background(Palette.lavender, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .font(.body)
+                            .messageBubble(isMine: true)
                     }
-                    Text("A short, friendly note in your words is written for you each time.").font(.footnote).foregroundStyle(Palette.inkTertiary)
+                    Text("A short, friendly note in your words is written for you each time.").font(.footnote).foregroundStyle(Palette.inkSecondary)
                 }
             }
         }
@@ -207,7 +203,7 @@ struct SkipChoice: View {
                 Spacer()
                 if selected { Image(systemName: "checkmark").font(.body.weight(.semibold)).foregroundStyle(Palette.lavenderStrong) }
             }
-            .padding(.horizontal, Space.m).frame(minHeight: 52).contentShape(Rectangle())
+            .padding(.horizontal, Space.m).frame(minHeight: RowMetrics.minHeight).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -252,7 +248,7 @@ struct CalendarSettingsView: View {
                         }
                     }
                     if let synced = app.availability.lastSyncedAt {
-                        Text("Last synced \(synced.formatted(.relative(presentation: .named)))").font(.footnote).foregroundStyle(Palette.inkTertiary)
+                        Text("Last synced \(synced.formatted(.relative(presentation: .named)))").font(.footnote).foregroundStyle(Palette.inkSecondary)
                     }
                 }
             }
@@ -266,7 +262,7 @@ struct CalendarSettingsView: View {
                         Spacer()
                         Pill("Coming soon", tint: .butter)
                     }
-                    .padding(.horizontal, Space.m).frame(minHeight: 52)
+                    .padding(.horizontal, Space.m).frame(minHeight: RowMetrics.minHeight)
                 }
             }
         }
@@ -329,12 +325,7 @@ struct PhotoSettingsView: View {
                 }
             }
 
-            CardList {
-                Button { confirmDelete = true } label: {
-                    Text("Delete all indexed photos").foregroundStyle(Palette.roseStrong).frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, Space.m).frame(minHeight: 52)
-            }
+            CardList { DestructiveRow("Delete all indexed photos") { confirmDelete = true } }
         }
         .confirmationDialog("Delete all indexed photos?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { Task { await app.photos.deleteAll() } }
@@ -372,7 +363,7 @@ struct MemorySettingsView: View {
                     ForEach(withMemories) { f in
                         VStack(alignment: .leading, spacing: Space.s) {
                             HStack(spacing: Space.s) {
-                                AvatarView(user: f.user, name: f.name, size: 28)
+                                AvatarView(user: f.user, name: f.name, size: AvatarSize.small)
                                 Text(f.name).font(Typography.friendName).foregroundStyle(Palette.ink)
                             }
                             FlowLayout {
@@ -386,12 +377,7 @@ struct MemorySettingsView: View {
                     }
                 }
             }
-            CardList {
-                Button { confirmDelete = true } label: {
-                    Text("Delete all memories").foregroundStyle(Palette.roseStrong).frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, Space.m).frame(minHeight: 52)
-            }
+            CardList { DestructiveRow("Delete all memories") { confirmDelete = true } }
         }
         .confirmationDialog("Delete all memories?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete for everyone", role: .destructive) { Task { await app.memory.deleteAll() } }
@@ -417,40 +403,30 @@ struct AccountSettingsView: View {
         let me = app.session.me?.user
         SettingsPage(title: "Account") {
             VStack(spacing: Space.s) {
-                if let me { AvatarView(user: me.publicUser, size: 96) }
+                if let me { AvatarView(user: me.publicUser, size: AvatarSize.hero) }
                 Text(me?.displayName ?? "").font(Typography.friendNameLarge).foregroundStyle(Palette.ink)
                 Text("@\(me?.handle ?? "")").font(.subheadline).foregroundStyle(Palette.inkSecondary)
             }
             .frame(maxWidth: .infinity)
 
             CardList {
-                AccountRow(title: "Handle", value: "@\(me?.handle ?? "")", chevron: false)
+                ValueRow("Handle", value: "@\(me?.handle ?? "")", chevron: false)
                 RowDivider()
                 Button { nameDraft = me?.displayName ?? ""; editingName = true } label: {
-                    AccountRow(title: "Name", value: me?.displayName ?? "", chevron: true)
+                    ValueRow("Name", value: me?.displayName)
                 }.buttonStyle(.plain)
                 RowDivider()
                 Button { showPhone = true } label: {
-                    AccountRow(title: "Phone", value: me?.phoneVerified == true ? "Verified" : "Add", chevron: true)
+                    ValueRow("Phone", value: me?.phoneVerified == true ? "Verified" : "Add")
                 }.buttonStyle(.plain)
                 RowDivider()
-                NavigationLink { BlockedUsersView() } label: { AccountRow(title: "Blocked", value: "", chevron: true) }.buttonStyle(.plain)
+                NavigationLink { BlockedUsersView() } label: { ValueRow("Blocked") }.buttonStyle(.plain)
             }
 
             CardList {
-                NavigationLink { FullTermsView.Page() } label: { AccountRow(title: "Terms & Privacy", value: "", chevron: true) }.buttonStyle(.plain)
-            }
-
-            CardList {
-                Button { app.signOut() } label: {
-                    Text("Sign out").foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, Space.m).frame(minHeight: 52)
+                DestructiveRow("Sign out") { app.signOut() }
                 RowDivider()
-                Button { confirmDelete = true } label: {
-                    Text("Delete account").foregroundStyle(Palette.roseStrong).frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, Space.m).frame(minHeight: 52)
+                DestructiveRow("Delete account") { confirmDelete = true }
             }
         }
         .alert("Your name", isPresented: $editingName) {
@@ -461,25 +437,14 @@ struct AccountSettingsView: View {
             Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: $showPhone) {
-            NavigationStack { PhoneView(onDone: { showPhone = false }, fromSettings: true) }.presentationDetents([.medium, .large])
+            NavigationStack {
+                PhoneView(onDone: { showPhone = false }, fromSettings: true)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showPhone = false } } }
+            }
+            .presentationDetents([.medium, .large])
+            .nudgeSheet()
         }
         .sheet(isPresented: $confirmDelete) { DeleteAccountSheet() }
-    }
-}
-
-struct AccountRow: View {
-    let title: String
-    let value: String
-    let chevron: Bool
-
-    var body: some View {
-        HStack {
-            Text(title).font(.body).foregroundStyle(Palette.ink)
-            Spacer()
-            Text(value).font(.body).foregroundStyle(Palette.inkSecondary)
-            if chevron { Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.inkTertiary) }
-        }
-        .padding(.horizontal, Space.m).frame(minHeight: 52).contentShape(Rectangle())
     }
 }
 
@@ -490,8 +455,7 @@ struct DeleteAccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.l) {
-            Image(systemName: "exclamationmark.triangle.fill").font(.title).foregroundStyle(Palette.roseStrong)
-                .frame(width: 56, height: 56).background(Palette.rose, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+            IconTile("exclamationmark.triangle.fill", tint: .rose, size: AvatarSize.large)
             VStack(alignment: .leading, spacing: Space.xs) {
                 Text("Delete your account?").font(Typography.title).foregroundStyle(Palette.ink)
                 Text("This permanently removes your profile, friends, messages, memories and indexed photos. It can't be undone.")
@@ -513,8 +477,7 @@ struct DeleteAccountSheet: View {
         }
         .padding(Space.l)
         .presentationDetents([.medium])
-        .presentationCornerRadius(Radius.sheet)
-        .background(Palette.bg)
+        .nudgeSheet()
     }
 }
 
@@ -529,13 +492,13 @@ struct BlockedUsersView: View {
                 CardList {
                     ForEach(Array(app.friends.blocked.enumerated()), id: \.element.id) { i, u in
                         HStack(spacing: Space.s) {
-                            AvatarView(user: u, size: 36)
+                            AvatarView(user: u, size: AvatarSize.medium)
                             Text(u.displayName).font(.body).foregroundStyle(Palette.ink)
                             Spacer()
-                            Button("Unblock") { Task { await app.friends.unblock(u.id) } }.font(.subheadline.weight(.semibold))
+                            NudgeButton("Unblock", kind: .secondary, size: .small, fullWidth: false) { Task { await app.friends.unblock(u.id) } }
                         }
-                        .padding(.horizontal, Space.m).frame(minHeight: 52)
-                        if i < app.friends.blocked.count - 1 { RowDivider() }
+                        .padding(.horizontal, Space.m).padding(.vertical, Space.s).frame(minHeight: RowMetrics.minHeight)
+                        if i < app.friends.blocked.count - 1 { RowDivider(inset: Space.m + AvatarSize.medium + Space.s) }
                     }
                 }
             }
@@ -575,6 +538,6 @@ struct TimeRow: View {
         }
         .padding(.horizontal, Space.m)
         .padding(.vertical, Space.xs)
-        .frame(minHeight: 52)
+        .frame(minHeight: RowMetrics.minHeight)
     }
 }

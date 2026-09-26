@@ -198,7 +198,7 @@ struct IncomingCallView: View {
         if let inc = app.incoming {
             VStack(spacing: Space.l) {
                 Spacer()
-                AvatarView(user: inc.friend, name: inc.name, size: 120)
+                AvatarView(user: inc.friend, name: inc.name, size: AvatarSize.hero)
                 VStack(spacing: Space.xs) {
                     Text(inc.name).font(Typography.largeTitle).foregroundStyle(Palette.callInk)
                     Text("Nudge video call").font(.body).foregroundStyle(Palette.callInk.opacity(0.7))
@@ -206,13 +206,13 @@ struct IncomingCallView: View {
                 Spacer()
                 HStack(spacing: 72) {
                     VStack(spacing: Space.xs) {
-                        CallControlButton(systemImage: "phone.down.fill", label: "Decline", role: .end) {
+                        CallControlButton(systemImage: "phone.down.fill", label: "Decline", role: .end, size: 72) {
                             Task { try? await app.api.endCall(inc.callId); app.incoming = nil }
                         }
                         Text("Decline").font(.footnote).foregroundStyle(Palette.callInk.opacity(0.8))
                     }
                     VStack(spacing: Space.xs) {
-                        CallControlButton(systemImage: "video.fill", label: "Accept", role: .active) {
+                        CallControlButton(systemImage: "phone.fill", label: "Accept", role: .accept, size: 72) {
                             Task { await app.startCall(callId: inc.callId, viaCallKit: false, friend: inc.friend, name: inc.name) }
                         }
                         Text("Accept").font(.footnote).foregroundStyle(Palette.callInk.opacity(0.8))
@@ -257,8 +257,11 @@ struct FollowUpApprovalSheet: View {
                     TextField("Message", text: $text, axis: .vertical)
                         .lineLimit(2...5)
                         .focused($focused)
-                        .padding(.horizontal, Space.m).padding(.vertical, Space.s)
+                        .padding(.horizontal, Space.m).padding(.vertical, 14)
                         .background(Palette.surfaceAlt, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.input, style: .continuous)
+                            .strokeBorder(NudgeTextFieldStyle.borderColor(focused ? .focused : .normal),
+                                          lineWidth: NudgeTextFieldStyle.borderWidth(focused ? .focused : .normal)))
                         .accessibilityLabel("Message to \(draft.friendName)")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -279,7 +282,6 @@ struct FollowUpApprovalSheet: View {
         }
         .padding(Space.l)
         .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
-        .presentationCornerRadius(Radius.sheet)
-        .background(Palette.bg)
+        .nudgeSheet()
     }
 }

@@ -22,7 +22,13 @@ struct NudgeApp: App {
             .tint(Palette.lavenderStrong)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await app.foregrounded() } }
+            switch phase {
+            case .background: app.didEnterBackground()
+            case .active:
+                app.returnHomeIfAway()
+                Task { await app.foregrounded() }
+            default: break
+            }
         }
     }
 }

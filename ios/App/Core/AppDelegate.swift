@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 if let nudgeId { Task { await app.nudges.presentFollowUp(nudgeId: nudgeId) } }
                 done([])
             case .messageNew:
-                done(app.openThreadId == friendId ? [] : [.banner, .sound, .list])
+                done(app.visibleThreadId == friendId ? [] : [.banner, .sound, .list])
             default:
                 done([.banner, .sound, .list])
             }
@@ -86,8 +86,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             } else if type == PushKind.followUpDraft.rawValue, let nudgeId {
                 await app.nudges.handleFollowUpAction(action, nudgeId: nudgeId, typedText: typedText)
             } else if type == PushKind.messageNew.rawValue, let friendId {
-                app.selectedTab = .messages
-                app.openThreadId = friendId
+                app.openThread(friendId)
             }
             await sync
             done()
