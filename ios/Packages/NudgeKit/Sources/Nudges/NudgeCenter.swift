@@ -114,13 +114,18 @@ public final class NudgeCenter {
     public func accept(_ nudge: Nudge) async {
         banner = nil
         do {
-            let n = try await api.respond(nudgeId: nudge.id, action: .accept)
-            waiting = n
-            await socket?.setWaiting(nudgeId: n.id)
-            if (n.state == .matched || n.state == .inCall), let callId = n.callId { onMatched?(callId, n) }
+            await enterWaitingRoom(try await api.respond(nudgeId: nudge.id, action: .accept))
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    /// Shows the waiting room for a nudge I've already accepted (e.g. a "Call now" the server created pre-accepted).
+    public func enterWaitingRoom(_ n: Nudge) async {
+        banner = banner?.id == n.id ? nil : banner
+        waiting = n
+        await socket?.setWaiting(nudgeId: n.id)
+        if (n.state == .matched || n.state == .inCall), let callId = n.callId { onMatched?(callId, n) }
     }
 
     public func skip(_ nudge: Nudge) async {

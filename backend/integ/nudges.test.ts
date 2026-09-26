@@ -192,4 +192,20 @@ describe('nudges', () => {
     const n2 = await a.req('POST', `/friends/${b.id}/call`);
     expect((await a.req('POST', `/nudges/${n2.id}/cancel`)).state).toBe('cancelled');
   });
+
+  it('NUD-13: the Call now caller gets WS call.matched, never a VoIP ring, even if the friend accepts before `waiting` lands', async () => {
+    const [a, b] = await pair('dirw');
+    const sa = await openSocket(a); // a is in the app on b's profile; it never sends `waiting` here
+    try {
+      const n = await a.req('POST', `/friends/${b.id}/call`);
+      await expect(a.req('POST', `/nudges/${n.id}/respond`, { action: 'accept' })).rejects.toMatchObject({ status: 409 });
+      const matched = await b.req('POST', `/nudges/${n.id}/respond`, { action: 'accept' });
+      expect(matched.state).toBe('matched');
+      expect((await sa.waitFor((e) => e.type === 'call.matched')).callId).toBe(matched.callId);
+      expect((await pushes(a)).find((p) => p.kind === 'voip')).toBeUndefined();
+      await a.req('POST', `/calls/${matched.callId}/end`);
+    } finally {
+      sa.close();
+    }
+  });
 });

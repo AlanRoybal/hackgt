@@ -15,7 +15,7 @@ final class E2ETests: XCTestCase {
     }
 
     func testOnboardFriendMessageCallAndPhoto() throws {
-        try XCTSkipIf(ProcessInfo.processInfo.environment["E2E_SCENARIO"] == "app-closed", "run via ios-e2e.sh app-e2e")
+        try XCTSkipIf(ProcessInfo.processInfo.environment["E2E_SCENARIO"] != "app-e2e", "run via ios-e2e.sh app-e2e")
         try onboardAndAcceptBot()
 
         // The bot's message arrives.
@@ -48,6 +48,35 @@ final class E2ETests: XCTestCase {
         app.buttons["End call"].tap()
         XCTAssert(app.staticTexts["You talked with Test Bot"].waitForExistence(timeout: 20), "summary screen")
         attach("summary")
+    }
+
+    /// The app user starts the call from the friend's profile: they see it ringing, and join when the friend accepts.
+    func testAppUserCallsFromProfile() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["E2E_SCENARIO"] != "app-calls", "run via ios-e2e.sh app-calls")
+        try onboardAndAcceptBot()
+
+        app.staticTexts["Test Bot"].firstMatch.tap()
+        let callNow = app.buttons["Call now"]
+        XCTAssert(callNow.waitForExistence(timeout: 10), "Call now on the profile")
+        callNow.tap()
+
+        // The bot lets it ring for 8 s before accepting.
+        XCTAssert(app.staticTexts["Waiting for Test Bot…"].waitForExistence(timeout: 6), "ringing screen for the caller")
+        attach("caller-ringing")
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let miniWindow = app.otherElements["Your camera"]
+        for _ in 0..<6 {
+            if miniWindow.exists, !springboard.alerts.firstMatch.exists { break }
+            let allow = springboard.alerts.buttons.matching(NSPredicate(format: "label IN {'Allow', 'OK', 'Allow While Using App'}")).firstMatch
+            if allow.waitForExistence(timeout: 5) { allow.tap() }
+        }
+        XCTAssert(miniWindow.waitForExistence(timeout: 40), "caller is in the call after the friend accepts")
+        attach("caller-in-call")
+
+        if !app.buttons["End call"].isHittable { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap() }
+        XCTAssert(app.buttons["End call"].waitForExistence(timeout: 5), "call controls")
+        app.buttons["End call"].tap()
     }
 
     /// Fresh user: dev sign-in → Terms → handle → skip phone/primers → accept the bot's friend request.
