@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             case .nudge:
                 if let nudgeId { Task { await app.nudges.present(nudgeId: nudgeId) } }
                 done([])
+            case .followUpDraft:
+                // Open app: the approval sheet replaces the system banner.
+                if let nudgeId { Task { await app.nudges.presentFollowUp(nudgeId: nudgeId) } }
+                done([])
             case .messageNew:
                 done(app.openThreadId == friendId ? [] : [.banner, .sound, .list])
             default:
@@ -71,6 +75,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let nudgeId = info["nudgeId"] as? String
         let friendId = info["friendId"] as? String
         let type = info["type"] as? String
+        let typedText = (response as? UNTextInputNotificationResponse)?.userText
         nonisolated(unsafe) let done = completionHandler
         Task { @MainActor in
             let app = AppModel.shared
@@ -78,6 +83,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             async let sync: Void = app.availability.sync(reason: "notification action")
             if type == PushKind.nudge.rawValue, let nudgeId {
                 await app.nudges.handleNotificationAction(action, nudgeId: nudgeId)
+            } else if type == PushKind.followUpDraft.rawValue, let nudgeId {
+                await app.nudges.handleFollowUpAction(action, nudgeId: nudgeId, typedText: typedText)
             } else if type == PushKind.messageNew.rawValue, let friendId {
                 app.selectedTab = .messages
                 app.openThreadId = friendId

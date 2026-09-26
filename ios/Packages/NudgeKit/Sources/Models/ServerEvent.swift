@@ -103,12 +103,17 @@ public enum PushKind: String, Sendable {
     case friendRequest = "friend.request"
     case friendAccepted = "friend.accepted"
     case availabilityStale = "availability.stale"
+    case followUpDraft = "followup.draft"
 }
 
 public enum NotificationIDs {
     public static let nudgeCategory = "NUDGE"
     public static let messageCategory = "MESSAGE"
+    public static let followUpCategory = "FOLLOWUP"
     public static let accept = "ACCEPT"
     public static let skip = "SKIP"
     public static let less = "LESS"
+    public static let sendFollowUp = "FOLLOWUP_SEND"
+    public static let editFollowUp = "FOLLOWUP_EDIT"
+    public static let discardFollowUp = "FOLLOWUP_DISCARD"
 }

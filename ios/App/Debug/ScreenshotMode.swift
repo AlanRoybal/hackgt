@@ -29,7 +29,7 @@ enum ScreenshotMode {
         "friends", "friends-empty", "friends-loading", "friends-offline", "add-friends-search", "add-friends-contacts",
         "add-friends-invite", "requests", "friend-profile", "friend-profile-empty",
         "messages", "messages-empty", "thread",
-        "banner", "toast", "waiting", "waiting-declined", "waiting-expired", "incoming",
+        "banner", "toast", "followup", "waiting", "waiting-declined", "waiting-expired", "incoming",
         "call-connecting", "call-connected", "call-suggestion", "call-mine", "call-other", "call-both", "call-queue",
         "call-auto", "call-muted", "call-reconnecting", "summary", "summary-pending",
         "settings", "settings-nudges", "settings-calendars", "settings-photos", "settings-memory", "settings-account",
@@ -74,7 +74,7 @@ struct ScreenshotHost: View {
         case let s where s.hasPrefix("permission-"):
             PermissionPrimerView(kind: permission(s), onDone: {})
         case "add-first-friends": AddFirstFriendsView(onDone: {})
-        case "friends", "friends-empty", "friends-loading", "friends-offline", "banner", "toast": MainView()
+        case "friends", "friends-empty", "friends-loading", "friends-offline", "banner", "toast", "followup": MainView()
         case "add-friends-search", "add-friends-contacts", "add-friends-invite": AddFriendsPreview(screen: screen)
         case "requests": FriendRequestsView()
         case "friend-profile", "friend-profile-empty": NavigationStack { FriendProfileView(friendId: MockData.mom.id) }
@@ -222,6 +222,8 @@ enum MockData {
         case "waiting-declined":
             app.nudges.preview(waiting: withState(nudge, .skipped, mine: .accepted, theirs: .skipped))
         case "waiting-expired": app.nudges.preview(waiting: withState(nudge, .expired, mine: .accepted, theirs: .expired))
+        case "followup":
+            app.nudges.preview(followUp: FollowUpDraft(nudgeId: nudge.id, friendName: "Mom", body: "Can't talk this minute, I'll call you later!"))
         case "incoming": app.incoming = AppModel.IncomingCall(callId: "c_2", friend: mom, name: "Mom")
         default: break
         }

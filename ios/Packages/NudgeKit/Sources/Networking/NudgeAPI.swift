@@ -195,6 +195,12 @@ public struct NudgeAPI: Sendable {
 
     public func cancelNudge(_ id: String) async throws -> Nudge { try await client.request(.post, "/nudges/\(id)/cancel") }
 
+    struct FollowUpBody: Encodable, Sendable { let action: String; let body: String? }
+    /// Sends my drafted follow-up (optionally edited) or discards it (NUD-12).
+    public func resolveFollowUp(nudgeId: String, send: Bool, body: String? = nil) async throws -> Nudge {
+        try await client.request(.post, "/nudges/\(nudgeId)/followup", body: FollowUpBody(action: send ? "send" : "discard", body: body))
+    }
+
     public func join(callId: String) async throws -> CallJoin { try await client.request(.get, "/calls/\(callId)/join") }
     public func endCall(_ callId: String) async throws { try await client.send(.post, "/calls/\(callId)/end") }
 

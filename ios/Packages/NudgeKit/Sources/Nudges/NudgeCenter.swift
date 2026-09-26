@@ -19,6 +19,20 @@ public struct ToastMessage: Identifiable, Hashable, Sendable {
     }
 }
 
+/// A follow-up the server drafted after I skipped; nothing is sent until I approve it (NUD-12).
+public struct FollowUpDraft: Identifiable, Hashable, Sendable {
+    public var nudgeId: String
+    public var friendName: String
+    public var body: String
+    public var id: String { nudgeId }
+
+    public init(nudgeId: String, friendName: String, body: String) {
+        self.nudgeId = nudgeId
+        self.friendName = friendName
+        self.body = body
+    }
+}
+
 /// Owns everything nudge-shaped on the client: the in-app banner, the waiting room, See less + Undo.
 @MainActor
 @Observable
@@ -29,6 +43,8 @@ public final class NudgeCenter {
     public private(set) var waiting: Nudge?
     public var toast: ToastMessage?
     public var error: String?
+    /// Drafted follow-up awaiting my approval.
+    public private(set) var followUp: FollowUpDraft?
 
     private let api: NudgeAPI
     private let socket: EventSocket?
@@ -56,7 +72,16 @@ public final class NudgeCenter {
         let nudge = UNNotificationCategory(identifier: NotificationIDs.nudgeCategory, actions: [accept, skip, less],
                                            intentIdentifiers: [], options: [])
         let message = UNNotificationCategory(identifier: NotificationIDs.messageCategory, actions: [], intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([nudge, message])
+        let send = UNNotificationAction(identifier: NotificationIDs.sendFollowUp, title: "Send", options: [],
+                                        icon: UNNotificationActionIcon(systemImageName: "paperplane.fill"))
+        let edit = UNTextInputNotificationAction(identifier: NotificationIDs.editFollowUp, title: "Edit…", options: [],
+                                                 icon: UNNotificationActionIcon(systemImageName: "pencil"),
+                                                 textInputButtonTitle: "Send", textInputPlaceholder: "Your message")
+        let discard = UNNotificationAction(identifier: NotificationIDs.discardFollowUp, title: "Don't send", options: [.destructive],
+                                           icon: UNNotificationActionIcon(systemImageName: "xmark"))
+        let followUp = UNNotificationCategory(identifier: NotificationIDs.followUpCategory, actions: [send, edit, discard],
+                                              intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([nudge, message, followUp])
     }
 
     // MARK: Inputs
@@ -101,6 +126,7 @@ public final class NudgeCenter {
                 if n.state == .matched || n.state == .inCall, let callId = n.callId { onMatched?(callId, n) }
             }
             if n.state.isTerminal { removeDelivered(nudgeId: n.id) }
+            showFollowUp(from: n)
         case .callMatched(let callId, let nudgeId):
             banner = banner?.id == nudgeId ? nil : banner
             onMatched?(callId, waiting?.id == nudgeId ? waiting : nil)
@@ -130,14 +156,14 @@ public final class NudgeCenter {
 
     public func skip(_ nudge: Nudge) async {
         banner = nil
-        _ = try? await api.respond(nudgeId: nudge.id, action: .skip)
+        if let n = try? await api.respond(nudgeId: nudge.id, action: .skip) { showFollowUp(from: n) }
     }
 
     /// Long-press → "See this less often": counts as skip and steps frequency down, with Undo (NUD-9).
     public func seeLess(_ nudge: Nudge?) async {
         banner = nil
         do {
-            if let nudge { _ = try await api.respond(nudgeId: nudge.id, action: .less) }
+            if let nudge { showFollowUp(from: try await api.respond(nudgeId: nudge.id, action: .less)) }
             let me = try await api.frequencyLess()
             onMeUpdated?(me)
             toast = ToastMessage(text: "Nudges set to \(me.user.settings.frequency.title)", action: .undoFrequency, actionTitle: "Undo")
@@ -152,6 +178,72 @@ public final class NudgeCenter {
     }
 
     public func dismissBanner() { banner = nil }
+
+    // MARK: Follow-up approval
+
+    /// Shows (or clears) the approval sheet from a nudge's latest state. A draft resolved elsewhere clears it.
+    private func showFollowUp(from n: Nudge) {
+        if let body = n.followUpDraft {
+            if followUp?.nudgeId != n.id { followUp = FollowUpDraft(nudgeId: n.id, friendName: n.friendName, body: body) }
+        } else if followUp?.nudgeId == n.id {
+            followUp = nil
+        }
+    }
+
+    /// A follow-up push arrived while the app is open, or its notification was tapped: show the sheet.
+    public func presentFollowUp(nudgeId: String) async {
+        guard let n = try? await api.nudge(nudgeId) else { return }
+        showFollowUp(from: n)
+    }
+
+    /// Sends the draft (as written or edited). Returns false if it failed so the sheet can stay up.
+    @discardableResult
+    public func sendFollowUp(_ draft: FollowUpDraft, body: String) async -> Bool {
+        do {
+            _ = try await api.resolveFollowUp(nudgeId: draft.nudgeId, send: true, body: body)
+            finishFollowUp(draft.nudgeId)
+            toast = ToastMessage(text: "Sent to \(draft.friendName)")
+            return true
+        } catch APIError.server(status: 409, _, _) {
+            finishFollowUp(draft.nudgeId)
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Hides the sheet without resolving the draft.
+    public func dismissFollowUp() { followUp = nil }
+
+    public func discardFollowUp(_ draft: FollowUpDraft) async {
+        finishFollowUp(draft.nudgeId)
+        _ = try? await api.resolveFollowUp(nudgeId: draft.nudgeId, send: false)
+    }
+
+    /// Lock-screen Send / Edit / Don't send on a follow-up notification (works when the app was terminated).
+    public func handleFollowUpAction(_ actionId: String, nudgeId: String, typedText: String?) async {
+        switch actionId {
+        case NotificationIDs.sendFollowUp:
+            _ = try? await api.resolveFollowUp(nudgeId: nudgeId, send: true)
+        case NotificationIDs.editFollowUp:
+            let text = typedText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            _ = try? await api.resolveFollowUp(nudgeId: nudgeId, send: !text.isEmpty, body: text.isEmpty ? nil : text)
+        case NotificationIDs.discardFollowUp:
+            _ = try? await api.resolveFollowUp(nudgeId: nudgeId, send: false)
+        case UNNotificationDefaultActionIdentifier:
+            await presentFollowUp(nudgeId: nudgeId)
+            return
+        default:
+            return
+        }
+        finishFollowUp(nudgeId)
+    }
+
+    private func finishFollowUp(_ nudgeId: String) {
+        if followUp?.nudgeId == nudgeId { followUp = nil }
+        removeDelivered(nudgeId: nudgeId, kind: .followUpDraft)
+    }
 
     public func leaveWaitingRoom() async {
         guard let w = waiting else { return }
@@ -179,21 +271,25 @@ public final class NudgeCenter {
         }
     }
 
-    /// Removes the delivered notification for a nudge that ended elsewhere.
-    public nonisolated func removeDelivered(nudgeId: String) {
+    /// Removes the delivered notifications of one kind (the nudge itself by default) for a nudge.
+    public nonisolated func removeDelivered(nudgeId: String, kind: PushKind = .nudge) {
         // UNUserNotificationCenter asserts outside an app/extension bundle (e.g. the package test runner).
         guard ["app", "appex"].contains(Bundle.main.bundleURL.pathExtension) else { return }
         Task {
             let center = UNUserNotificationCenter.current()
             let notes = await center.deliveredNotifications()
-            let ids = notes.filter { ($0.request.content.userInfo["nudgeId"] as? String) == nudgeId }.map(\.request.identifier)
+            let ids = notes.filter {
+                let info = $0.request.content.userInfo
+                return (info["nudgeId"] as? String) == nudgeId && (info["type"] as? String) == kind.rawValue
+            }.map(\.request.identifier)
             center.removeDeliveredNotifications(withIdentifiers: ids)
         }
     }
 
     // MARK: Preview
 
-    public func preview(banner: Nudge? = nil, waiting: Nudge? = nil, toast: ToastMessage? = nil) {
+    public func preview(banner: Nudge? = nil, waiting: Nudge? = nil, toast: ToastMessage? = nil, followUp: FollowUpDraft? = nil) {
+        self.followUp = followUp
         self.banner = banner
         self.waiting = waiting
         self.toast = toast
