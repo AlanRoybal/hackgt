@@ -74,7 +74,7 @@ Verification tags used below: **[U]** unit test · **[I]** backend integration t
 
 **NUD-6 Pair choice.** When a user qualifies with several friends, the pair with a due follow-up topic wins, then the longest time since last call. [U]
 
-**NUD-7 Copy.** Each participant sees their own nickname for the other, and minutes rounded down to 5 ("the next hour" if ≥ 60). With a due topic: "…Want to follow up about <topic>?" [U]
+**NUD-7 Copy.** Each participant sees their own nickname for the other, and minutes rounded down to 5 ("the next hour" if ≥ 60). With a shared topic (due first, else the nearest upcoming follow-up; a suggestion that never became a call is offered again after 6 h; a topic is marked used once both accept a nudge naming it, and stops being suggested 14 days after its follow-up date): "…Want to follow up on <topic>?" A direct call request says "<name> wants to call. Free to follow up on <topic>?" [U]
 
 **NUD-8 Lock-screen delivery.** App closed: alert push with category `NUDGE`; long-press shows Accept / Skip / See this less often, and the content extension shows both avatars and the free window. [D] [S extension preview]
 

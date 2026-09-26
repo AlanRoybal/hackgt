@@ -6,7 +6,7 @@ import { choosePairs, type CandidatePair } from '../engine/pairChoice.js';
 import { minutesUntilQuiet } from '../engine/quiet.js';
 import { isStale, suppressionReasons } from '../engine/suppression.js';
 import { isConditionalFailure, put, queryGsi, queryPrefix, update } from './db.js';
-import { applyEvent, enqueueDelay, getNudge, NUDGE_TTL_S, type NudgeItem } from './flows.js';
+import { applyEvent, enqueueDelay, getNudge, NUDGE_TTL_S, topicFor, type NudgeItem } from './flows.js';
 import { K, newId } from './keys.js';
 import { payloads, pushToUser } from './push.js';
 import { getFriendship, loadAvailability, loadUsers, nameFor, publicUser, type FriendshipItem, type UserItem } from './users.js';
@@ -26,15 +26,6 @@ export interface MatcherResult {
   considered: number;
   created: string[];
   skipped: Record<string, string[]>;
-}
-
-async function dueTopic(pk: string, now: number): Promise<{ id: string; title: string } | undefined> {
-  const today = new Date(now).toISOString().slice(0, 10);
-  const topics = await queryPrefix(`PAIR#${pk}`, 'TOPIC#');
-  const due = topics
-    .filter((t) => t.status === 'open' && t.followUpAfter && t.followUpAfter <= today)
-    .sort((a, b) => String(a.followUpAfter).localeCompare(String(b.followUpAfter)));
-  return due[0] ? { id: due[0].id, title: due[0].title } : undefined;
 }
 
 /** Minutes in the mutual free window, capped by either user's quiet hours; null if busy now. */
@@ -86,8 +77,8 @@ export async function runMatcher(opts: MatcherOptions = {}): Promise<MatcherResu
       result.skipped[f.pairKey] = reasons;
       continue;
     }
-    const topic = await dueTopic(f.pairKey, now);
-    candidates.push({ pairKey: f.pairKey, a: f.a, b: f.b, hasDueTopic: !!topic, lastCallAt: f.lastCallAt, minutes: w.minutes, end: w.end, topic });
+    const topic = await topicFor(f.pairKey, now);
+    candidates.push({ pairKey: f.pairKey, a: f.a, b: f.b, hasDueTopic: !!topic?.due, lastCallAt: f.lastCallAt, minutes: w.minutes, end: w.end, topic });
   }
 
   for (const c of choosePairs(candidates)) {

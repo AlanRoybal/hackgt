@@ -34,7 +34,8 @@ export async function pushToUser(userId: string, type: PushType, payload: Record
   }
   const cfg = await apnsConfig();
   if (!cfg) {
-    console.log(JSON.stringify({ msg: 'push (apns not configured)', userId, type, payloadType: payload.type }));
+    // Nothing reaches a device without this, so it's an error rather than a quiet no-op (see scripts/put-apns-secrets.sh).
+    console.error(JSON.stringify({ msg: 'push dropped: apns not configured', stage: env.stage, userId, type, payloadType: payload.type }));
     return;
   }
   const devices = await queryPrefix<Device>(`USER#${userId}`, 'DEVICE#');

@@ -17,7 +17,7 @@ Both install the latest TestFlight build. Do this on a video/voice chat on a lap
 | 11 | Both | Count down "3, 2, 1" and both tap Show on a suggestion. | Each sees the other's photo. | |
 | 12 | Both | Mention an upcoming event (e.g. "my physics exam is Thursday"). End the call. | Summary screen: duration + "We'll remember: physics exam". | |
 | 13 | Friend | Delete one memory chip. | Gone for Alan too (Friend profile → Memories). | |
-| 14 | Both | After the follow-up date (or use the dev hook to set followUpAfter to now), force matcher. | Nudge says "…Want to follow up about the physics exam?" | |
+| 14 | Both | Force matcher (any open topic with a follow-up date qualifies; due ones win). | Nudge says "…Want to follow up on the physics exam?" | |
 | 15 | Both | Kill the app; send a message from the other side. | Push arrives. | |
 
 Notes / bugs:
