@@ -44,14 +44,12 @@ export async function twoBots(opts: { verbose?: boolean; trials?: number }): Pro
     A.socket.send({ action: "waiting", nudgeId: nudge.id });
     await B.socket.waitFor((e) => e.type === "nudge.updated" && e.nudge?.id === nudge.id, 15000, "B nudge.updated");
     B.socket.send({ action: "waiting", nudgeId: nudge.id });
-    await B.api.post(`/nudges/${nudge.id}/respond`, { action: "accept" });
-    const [mA, mB] = await Promise.all([
-      A.socket.waitFor((e) => e.type === "call.matched", 15000, "A call.matched"),
-      B.socket.waitFor((e) => e.type === "call.matched", 15000, "B call.matched"),
-    ]);
-    check("both participants get call.matched with the same callId", mA.callId === mB.callId, mA.callId);
+    const responded = await B.api.post(`/nudges/${nudge.id}/respond`, { action: "accept" });
+    // The responder completes the match, so its respond response carries the callId; A waits in the room.
+    const mA = await A.socket.waitFor((e) => e.type === "call.matched", 15000, "A call.matched");
+    check("waiting participant gets call.matched; responder gets the same callId", mA.callId === responded.callId, mA.callId);
 
-    await Promise.all([A.joinCall(mA.callId), B.joinCall(mB.callId)]);
+    await Promise.all([A.joinCall(mA.callId), B.joinCall(responded.callId)]);
     check("both joined the Chime meeting", true);
     await sleep(1500);
 

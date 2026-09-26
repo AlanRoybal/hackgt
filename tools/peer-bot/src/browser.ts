@@ -16,6 +16,7 @@ function pageBundle(): Promise<string> {
     format: "iife",
     platform: "browser",
     target: "es2020",
+    define: { global: "globalThis" },
     logLevel: "silent",
     // The SDK drags in AWS credential providers for its messaging client; they never run in the page,
     // so Node built-ins resolve to an empty module.
