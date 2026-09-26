@@ -12,6 +12,14 @@ struct CallView: View {
     @State private var corner: SnapGeometry.Corner = .topTrailing
     @State private var drag: CGSize = .zero
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+
+    /// Figma M18a: after 3 s idle the header and controls fade (0.25 s) and drift off-edge; a tap brings them back
+    /// on the standard spring. Reduce Motion: fade only.
+    static let autoHideAfter: Duration = .seconds(3)
+    private var controlsAnimation: Animation {
+        controlsVisible ? Motion.resolved(Motion.standard, reduceMotion: reduceMotion) : .easeOut(duration: Motion.Durations.chromeHide)
+    }
 
     var call: CallController { app.call }
     static let miniSize = CGSize(width: 112, height: 160)
@@ -41,9 +49,11 @@ struct CallView: View {
 
                 VStack {
                     Spacer()
-                    if controlsVisible {
-                        controls.transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
+                    controls
+                        .opacity(controlsVisible ? 1 : 0)
+                        .offset(y: controlsVisible || reduceMotion ? 0 : 12)
+                        .allowsHitTesting(controlsVisible)
+                        .accessibilityHidden(!controlsVisible)
                 }
                 .padding(.bottom, Space.l)
                 .frame(maxWidth: .infinity)
@@ -53,11 +63,13 @@ struct CallView: View {
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .statusBarHidden(!controlsVisible)
-        .animation(Motion.resolved(Motion.move, reduceMotion: reduceMotion), value: controlsVisible)
+        .animation(controlsAnimation, value: controlsVisible)
         .task(id: lastInteraction) {
-            try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled, call.suggestion == nil { controlsVisible = false }
+            try? await Task.sleep(for: Self.autoHideAfter)
+            // Never hide while VoiceOver is on: the controls would be unreachable.
+            if !Task.isCancelled, call.suggestion == nil, !voiceOver { controlsVisible = false }
         }
+        .onChange(of: voiceOver) { _, on in if on { showControls() } }
         .sensoryFeedback(.impact(weight: .light), trigger: corner)
         .sensoryFeedback(.success, trigger: call.photos?.display.photo?.shareId)
     }
@@ -79,6 +91,7 @@ struct CallView: View {
             }
         }
         .opacity(controlsVisible ? 1 : 0)
+        .offset(y: controlsVisible || reduceMotion ? 0 : -8)
         .allowsHitTesting(false)
     }
 
