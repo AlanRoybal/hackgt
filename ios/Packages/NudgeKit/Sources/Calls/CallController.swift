@@ -49,6 +49,13 @@ public final class CallController {
     private var localTileId: Int?
     private var remoteTileId: Int?
     private var transcriber: TranscribeStreamClient?
+    fileprivate var sessionGeneration = UUID()
+    private var audioStartTask: Task<Void, Error>?
+    private var audioStartReturned = false
+    private var audioConnected = false
+    private var pendingMuteChange = false
+    private var muteRestoreTask: Task<Void, Never>?
+    private var ending = false
     private var transcriptEpoch = 0
     private var mic: MicCapture?
     private var transcriptTask: Task<Void, Never>?
@@ -79,7 +86,12 @@ public final class CallController {
     // MARK: Join / leave
 
     public func join(callId: String, viaCallKit: Bool) async {
-        guard self.callId != callId || phase == .ended || phase == .idle else { return }
+        guard !ending, !isActive else { return }
+        sessionGeneration = UUID()
+        let generation = sessionGeneration
+        audioStartReturned = false
+        audioConnected = false
+        pendingMuteChange = false
         self.callId = callId
         phase = .connecting
         startedAt = nil
@@ -89,20 +101,22 @@ public final class CallController {
         guard await Self.ensureMicrophone() else {
             log.error("join blocked: microphone permission denied")
             self.error = "Nudge needs the microphone for calls. Turn it on in Settings."
-            phase = .ended
+            await leave()
             return
         }
+        guard sessionGeneration == generation, isActive else { return }
         let camera = await Self.ensureCamera() // camera off is fine; the call continues audio-only
         log.notice("join: permissions ok, camera=\(camera, privacy: .public)")
         do {
             let join = try await api.join(callId: callId)
+            guard sessionGeneration == generation, isActive else { return }
             peer = join.peer
             peerName = join.peerName
             peerAttendeeId = join.peerAttendeeId
             let config = try ChimeConfig.make(meeting: join.meeting, attendee: join.attendee)
             let session = DefaultMeetingSession(configuration: config, logger: ConsoleLogger(name: "Chime", level: .ERROR))
             self.session = session
-            let bridge = ChimeBridge(owner: self)
+            let bridge = ChimeBridge(owner: self, generation: generation)
             self.bridge = bridge
             session.audioVideo.addAudioVideoObserver(observer: bridge)
             session.audioVideo.addVideoTileObserver(observer: bridge)
@@ -119,20 +133,26 @@ public final class CallController {
             let avConfig = AudioVideoConfiguration(callKitEnabled: viaCallKit)
             #endif
             let configBox = UncheckedSendable(avConfig)
-            try await Task.detached(priority: .userInitiated) {
+            let startup = Task.detached(priority: .userInitiated) {
                 try box.value.start(audioVideoConfiguration: configBox.value)
-            }.value
+            }
+            audioStartTask = startup
+            try await startup.value
             log.notice("join: Chime start returned")
-            guard applySessionMute() else { return }
+            guard sessionGeneration == generation, isActive else { return }
+            audioStartTask = nil
+            audioStartReturned = true
+            restoreMuteWhenReady()
             routeAudioToSpeaker()
             try? session.audioVideo.startLocalVideo()
             session.audioVideo.startRemoteVideo()
             setUpPhotos(callId: callId)
             await startTranscription(callId: callId)
         } catch {
+            guard sessionGeneration == generation, isActive else { return }
             log.error("join failed: \(String(describing: error), privacy: .public)")
             self.error = "Couldn't connect the call."
-            phase = .ended
+            await leave()
         }
     }
 
@@ -152,28 +172,30 @@ public final class CallController {
         }
     }
 
-    public func leave() async {
-        guard let callId, phase != .ended else { return }
-        await teardown()
-        try? await api.endCall(callId)
-        onEnded?(callId, durationSec)
-    }
+    public func leave() async { await finishCall(notifyServer: true) }
 
-    /// The other side ended (WS `call.ended` or Chime session stopped).
-    public func remoteEnded() async {
-        guard let callId, phase != .ended else { return }
-        await teardown()
-        onEnded?(callId, durationSec)
-    }
+    /// Only a server/peer end event uses this path; local errors must end the shared call too.
+    public func remoteEnded() async { await finishCall(notifyServer: false) }
 
-    private func teardown() async {
+    private func finishCall(notifyServer: Bool) async {
+        guard let callId, !ending, phase != .ended else { return }
+        ending = true
         endedAt = Date()
-        phase = .ended
-        suggestion = nil
-        autoShown = nil
-        photos?.reset()
-        await stopTranscription()
+        let duration = durationSec
+        // Invalidate queued SDK callbacks and pending join continuations before stopping audio.
+        sessionGeneration = UUID()
+        muteRestoreTask?.cancel()
+        muteRestoreTask = nil
+        audioConnected = false
+        audioStartReturned = false
+        transcriber?.muteGate.setMuted(true)
+        mic?.stop()
+        mic = nil
+        let stoppingSession = session
+        let startup = audioStartTask
+        audioStartTask = nil
         if let session {
+            _ = session.audioVideo.realtimeLocalMute()
             session.audioVideo.stopLocalVideo()
             session.audioVideo.stopRemoteVideo()
             session.audioVideo.stop()
@@ -182,6 +204,27 @@ public final class CallController {
         bridge = nil
         localTileId = nil
         remoteTileId = nil
+        phase = .ended
+        suggestion = nil
+        autoShown = nil
+        photos?.reset()
+        // End the server meeting concurrently with transcription cleanup, not after it.
+        async let serverEnd: Void = notifyServer ? endServerCall(callId) : ()
+        await stopTranscription()
+        // If stop raced start(), the SDK may have ignored stop while still initializing.
+        // Do not permit a replacement call until that startup has finished and been stopped.
+        if let startup {
+            _ = try? await startup.value
+            stoppingSession?.audioVideo.stop()
+        }
+        await serverEnd
+        ending = false
+        onEnded?(callId, duration)
+    }
+
+    private func endServerCall(_ id: String) async {
+        do { try await api.endCall(id) }
+        catch { log.error("end call request failed: \(String(describing: error), privacy: .public)") }
     }
 
     // MARK: Controls
@@ -190,7 +233,7 @@ public final class CallController {
 
     public func setMuted(_ muted: Bool) {
         guard muted != isMuted else { return }
-        if let av = session?.audioVideo {
+        if audioStartReturned && audioConnected, let av = session?.audioVideo {
             let success = muted ? av.realtimeLocalMute() : av.realtimeLocalUnmute()
             guard success else {
                 error = muted ? "Couldn't mute the call. Please end it and try again." : "Couldn't unmute. Your microphone is still muted."
@@ -198,6 +241,7 @@ public final class CallController {
                 return
             }
         }
+        pendingMuteChange = !(audioStartReturned && audioConnected)
         isMuted = muted
         transcriber?.muteGate.setMuted(muted)
         transcriptEpoch += 1
@@ -210,19 +254,25 @@ public final class CallController {
         }
     }
 
-    /// A new/reconnected Chime audio unit must match the button, even when no new tap occurs.
-    @discardableResult
-    private func applySessionMute() -> Bool {
-        guard let av = session?.audioVideo else { return true }
-        let success = isMuted ? av.realtimeLocalMute() : av.realtimeLocalUnmute()
-        guard success else {
-            // Don't keep a live audio session behind an unverified mute indicator.
-            error = "Couldn't restore microphone state. The call was stopped."
-            av.stop()
-            Task { await self.remoteEnded() }
-            return false
+    /// Wait for both start() and the SDK's connected callback. Default unmuted audio needs no reset.
+    private func restoreMuteWhenReady() {
+        guard audioStartReturned, audioConnected, isActive, isMuted || pendingMuteChange else { return }
+        muteRestoreTask?.cancel()
+        let generation = sessionGeneration
+        muteRestoreTask = Task { [weak self] in
+            for attempt in 0..<3 {
+                guard let self, !Task.isCancelled, self.sessionGeneration == generation,
+                      self.isActive, self.isMuted || self.pendingMuteChange else { return }
+                let applied = self.isMuted ? self.session?.audioVideo.realtimeLocalMute() : self.session?.audioVideo.realtimeLocalUnmute()
+                if applied == true { self.pendingMuteChange = false; return }
+                self.log.notice("mute restore retry \(attempt + 1)")
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            }
+            guard let self, self.sessionGeneration == generation, self.isActive, self.isMuted || self.pendingMuteChange else { return }
+            self.error = "Couldn't restore mute. Ending the call."
+            self.muteRestoreTask = nil
+            await self.leave()
         }
-        return true
     }
 
     public func toggleCamera() {
@@ -396,20 +446,28 @@ public final class CallController {
 
     // MARK: Chime callbacks
 
-    fileprivate func audioStarted(reconnecting: Bool) {
-        guard applySessionMute() else { return }
+    func audioStarted(reconnecting: Bool) {
+        guard isActive else { return }
+        audioConnected = true
+        restoreMuteWhenReady()
         phase = .connected
         if startedAt == nil { startedAt = Date() }
         // Chime recreates its audio unit after a network reconnect, which resets this route.
         routeAudioToSpeaker()
     }
 
-    fileprivate func audioConnecting(reconnecting: Bool) {
+    func audioConnecting(reconnecting: Bool) {
+        guard isActive else { return }
+        audioConnected = false
         phase = reconnecting ? .reconnecting : .connecting
     }
 
-    fileprivate func audioStopped() {
-        Task { await remoteEnded() }
+    func audioStopped() {
+        let generation = sessionGeneration
+        Task {
+            guard sessionGeneration == generation else { return }
+            await leave()
+        }
     }
 
     fileprivate func setPoorNetwork(_ poor: Bool) { poorNetwork = poor }
@@ -442,7 +500,8 @@ public final class CallController {
 
     public func preview(peer: PublicUser, peerName: String, phase: Phase, muted: Bool = false, cameraOn: Bool = true,
                         remoteCameraOff: Bool = false, poorNetwork: Bool = false, suggestion: PhotoSuggestion? = nil,
-                        autoShown: PhotoSuggestion? = nil, display: DisplayState = .selfView) {
+                        autoShown: PhotoSuggestion? = nil, display: DisplayState = .selfView, callId: String? = nil) {
+        self.callId = callId
         self.peer = peer
         self.peerName = peerName
         self.phase = phase
@@ -469,10 +528,14 @@ private final class SessionBox: @unchecked Sendable {
 /// Chime observer protocols are non-isolated Obj-C; this bridge extracts values and hops to the main actor.
 private final class ChimeBridge: NSObject, AudioVideoObserver, VideoTileObserver, DataMessageObserver, TranscriptEventObserver, @unchecked Sendable {
     weak var owner: CallController?
-    init(owner: CallController) { self.owner = owner }
+    let generation: UUID
+    init(owner: CallController, generation: UUID) { self.owner = owner; self.generation = generation }
 
     private func main(_ body: @escaping @MainActor (CallController) -> Void) {
-        Task { @MainActor [weak owner] in if let owner { body(owner) } }
+        let generation = generation
+        Task { @MainActor [weak owner] in
+            if let owner, owner.sessionGeneration == generation { body(owner) }
+        }
     }
 
     func audioSessionDidStartConnecting(reconnecting: Bool) { main { $0.audioConnecting(reconnecting: reconnecting) } }
