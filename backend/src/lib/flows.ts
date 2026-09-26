@@ -34,11 +34,21 @@ export interface NudgeItem {
   sentAt?: string;
   expiresAt?: string;
   callId?: string;
+  /** Follow-up written for the skipper to approve; nothing reaches the other person until they send it (NUD-12). */
+  followUp?: FollowUp;
   createdAt: string;
   version: number;
   ttl: number;
   gsi1pk: string;
   gsi1sk: string;
+}
+
+export interface FollowUp {
+  fromUserId: string;
+  toUserId: string;
+  body: string;
+  status: 'draft' | 'sent' | 'discarded';
+  resolvedAt?: string;
 }
 
 export interface CallItem {
@@ -112,6 +122,7 @@ export async function nudgeDTO(n: NudgeItem, viewerId: string, users?: Map<strin
     topic: n.topicId ? { id: n.topicId, title: n.topicTitle ?? '' } : undefined,
     expiresAt: n.expiresAt,
     callId: n.callId,
+    followUpDraft: n.followUp?.fromUserId === viewerId && n.followUp.status === 'draft' ? n.followUp.body : undefined,
   };
 }
 
@@ -212,11 +223,45 @@ async function runEffect(n: NudgeItem, eff: Effect, actorId?: string): Promise<N
       const from = await getUser(eff.fromUserId);
       if (from.settings.skipBehavior !== 'message') return;
       const body = await followUpMessage();
-      const m = await putMessage(eff.fromUserId, eff.toUserId, { senderId: eff.fromUserId, body, kind: 'auto_followup' });
-      await deliverMessage(m, { pushTo: eff.toUserId });
-      return;
+      const followUp: FollowUp = { fromUserId: eff.fromUserId, toUserId: eff.toUserId, body, status: 'draft' };
+      const updated = (await update(K.nudge(n.id), { followUp })) as NudgeItem;
+      const [to, fs] = await Promise.all([getUser(eff.toUserId), getFriendship(eff.fromUserId, eff.toUserId)]);
+      await pushToUser(
+        eff.fromUserId,
+        'alert',
+        payloads.followUpDraft({ nudgeId: n.id, friendId: eff.toUserId, friendName: nameFor(to, fs), body }),
+      );
+      return updated;
     }
   }
+}
+
+/** The skipper sends (optionally edited) or discards their drafted follow-up. Each draft resolves once. */
+export async function resolveFollowUp(nudgeId: string, userId: string, action: 'send' | 'discard', editedBody?: string) {
+  const n = await getNudge(nudgeId);
+  const f = n.followUp;
+  if (!f || f.fromUserId !== userId) throw notFound('followup_not_found');
+  if (f.status !== 'draft') throw new HttpError(409, 'followup_resolved');
+  const body = (editedBody ?? f.body).trim();
+  if (action === 'send' && (!body || body.length > 1000)) throw new HttpError(400, 'invalid_body');
+  const resolved: FollowUp = { ...f, body: action === 'send' ? body : f.body, status: action === 'send' ? 'sent' : 'discarded', resolvedAt: new Date().toISOString() };
+  let updated: NudgeItem;
+  try {
+    updated = (await update(K.nudge(n.id), { followUp: resolved }, {
+      condition: '#f.#s = :draft',
+      names: { '#f': 'followUp', '#s': 'status' },
+      values: { ':draft': 'draft' },
+    })) as NudgeItem;
+  } catch (e) {
+    if (isConditionalFailure(e)) throw new HttpError(409, 'followup_resolved');
+    throw e;
+  }
+  if (action === 'send') {
+    const m = await putMessage(f.fromUserId, f.toUserId, { senderId: f.fromUserId, body, kind: 'auto_followup' });
+    await deliverMessage(m, { pushTo: f.toUserId });
+  }
+  await broadcastNudge(updated);
+  return updated;
 }
 
 /** Clears the nudge reservation on both users (only if it still points at this nudge). */

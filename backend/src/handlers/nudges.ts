@@ -1,5 +1,5 @@
 // /nudges/* (SPEC NUD-9..12).
-import { activeNudgeFor, applyEvent, getNudge, nudgeDTO } from '../lib/flows.js';
+import { activeNudgeFor, applyEvent, getNudge, nudgeDTO, resolveFollowUp } from '../lib/flows.js';
 import { bad, notFound, router } from '../lib/http.js';
 import { getUser } from '../lib/users.js';
 
@@ -22,6 +22,13 @@ export const handler = router({
     await participantNudge(params.id, userId);
     const n = await applyEvent(params.id, { type: 'respond', userId, action: body.action });
     return nudgeDTO(n, userId);
+  },
+
+  'POST /nudges/{id}/followup': async ({ userId, params, body }) => {
+    if (!['send', 'discard'].includes(body.action)) throw bad('invalid_action');
+    if (body.body !== undefined && typeof body.body !== 'string') throw bad('invalid_body');
+    await participantNudge(params.id, userId);
+    return nudgeDTO(await resolveFollowUp(params.id, userId, body.action, body.body), userId);
   },
 
   'POST /nudges/{id}/cancel': async ({ userId, params }) => {

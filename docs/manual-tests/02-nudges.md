@@ -12,7 +12,7 @@ curl -X POST "$API/dev/matcher/run" -H "authorization: Bearer $TOKEN"   # or use
 | 1 | Add a calendar event covering now. Open the app (syncs). Force matcher. | No nudge (you're busy). | |
 | 2 | Delete the event, reopen app, force matcher. Lock the phone. | ~60 s later: lock-screen nudge "You and Test Friend are both free for …". | |
 | 3 | Long-press the notification. | Expanded view shows both avatars + free-window bar; actions Accept / Skip / See this less often. | |
-| 4 | Tap Skip (bot started with `--skip` off, so it accepted). | Bot's thread gets your auto follow-up message (Settings → When I skip = Send a follow-up message). | |
+| 4 | Tap Skip (bot started with `--skip` off, so it accepted). | A "Send <bot> a message?" notification arrives with the drafted follow-up. Nothing is in the bot's thread yet. Long-press: Send / Edit… / Don't send. Edit…, type a message, Send → the bot's thread gets your edited text. Repeat with Don't send → nothing is sent. With the app open, Skip shows the approval sheet instead. | |
 | 5 | Settings → When I skip → Send nothing. Repeat, Skip. | No message sent. | |
 | 6 | Repeat, choose See this less often. | Frequency drops one level (High → Normal). | |
 | 7 | With the app open on Friends, force a match. | Custom banner drops from the top with Accept/Skip; no system banner. | |

@@ -226,3 +226,60 @@ struct IncomingCallView: View {
         }
     }
 }
+
+/// After skipping, the skipper reviews the drafted follow-up before anything reaches their friend (NUD-12).
+struct FollowUpApprovalSheet: View {
+    @Environment(AppModel.self) private var app
+    let draft: FollowUpDraft
+    @State private var text: String
+    @State private var sending = false
+    @FocusState private var focused: Bool
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    init(draft: FollowUpDraft) {
+        self.draft = draft
+        _text = State(initialValue: draft.body)
+    }
+
+    private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(spacing: Space.m) {
+            // Scrolls so the title and message stay readable at accessibility text sizes.
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.l) {
+                    VStack(alignment: .leading, spacing: Space.xs) {
+                        Text("Send \(draft.friendName) a message?").font(Typography.title).foregroundStyle(Palette.ink)
+                        Text("\(draft.friendName) was ready to talk. Edit this if you like; nothing is sent until you tap Send.")
+                            .font(.body).foregroundStyle(Palette.inkSecondary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    TextField("Message", text: $text, axis: .vertical)
+                        .lineLimit(2...5)
+                        .focused($focused)
+                        .padding(.horizontal, Space.m).padding(.vertical, Space.s)
+                        .background(Palette.surfaceAlt, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+                        .accessibilityLabel("Message to \(draft.friendName)")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            VStack(spacing: Space.xs) {
+                NudgeButton("Send", systemImage: "paperplane.fill", kind: .primary, isLoading: sending) {
+                    Task {
+                        sending = true
+                        await app.nudges.sendFollowUp(draft, body: trimmed)
+                        sending = false
+                    }
+                }
+                .disabled(trimmed.isEmpty || sending)
+                NudgeButton("Don't send", kind: .secondary) { Task { await app.nudges.discardFollowUp(draft) } }
+                    .disabled(sending)
+            }
+        }
+        .padding(Space.l)
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        .presentationCornerRadius(Radius.sheet)
+        .background(Palette.bg)
+    }
+}

@@ -91,6 +91,22 @@ export const payloads = {
   voip(p: { callId: string; nudgeId: string; callerId: string; callerName: string }) {
     return { type: 'call.incoming', ...p, hasVideo: true };
   },
+  /** Asks the skipper to approve their drafted follow-up (NUD-12). */
+  followUpDraft(p: { nudgeId: string; friendId: string; friendName: string; body: string }) {
+    return {
+      aps: {
+        alert: { title: `Send ${p.friendName} a message?`, body: `\u201C${p.body}\u201D` },
+        category: 'FOLLOWUP',
+        sound: 'default',
+        'thread-id': 'nudge',
+      },
+      type: 'followup.draft',
+      nudgeId: p.nudgeId,
+      friendId: p.friendId,
+      friendName: p.friendName,
+      draft: p.body,
+    };
+  },
   message(p: { friendId: string; title: string; body: string }) {
     return {
       aps: { alert: { title: p.title, body: p.body }, category: 'MESSAGE', 'thread-id': `msg-${p.friendId}`, sound: 'default' },

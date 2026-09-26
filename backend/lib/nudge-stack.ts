@@ -323,7 +323,8 @@ export class NudgeStack extends Stack {
     ]) route(m, p, messagesFn);
 
     for (const [m, p] of [
-      ['GET', '/nudges/active'], ['GET', '/nudges/{id}'], ['POST', '/nudges/{id}/respond'], ['POST', '/nudges/{id}/cancel'],
+      ['GET', '/nudges/active'], ['GET', '/nudges/{id}'], ['POST', '/nudges/{id}/respond'], ['POST', '/nudges/{id}/followup'],
+      ['POST', '/nudges/{id}/cancel'],
     ]) route(m, p, nudgesFn);
 
     for (const [m, p] of [

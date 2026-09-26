@@ -314,13 +314,16 @@ public struct Nudge: Codable, Sendable, Hashable, Identifiable {
     public var topic: TopicRef?
     public var expiresAt: Date?
     public var callId: String?
+    /// My drafted follow-up waiting for approval after I skipped (NUD-12). Never set for the other person.
+    public var followUpDraft: String?
 
     public var friendName: String { nickname?.nonEmpty ?? friend.displayName }
 
     public init(
         id: String, kind: Kind = .auto, friend: PublicUser, nickname: String? = nil, state: NudgeState,
         myResponse: NudgeResponse? = nil, theirResponse: NudgeResponse? = nil, window: TimeWindow, minutes: Int,
-        title: String, body: String, topic: TopicRef? = nil, expiresAt: Date? = nil, callId: String? = nil
+        title: String, body: String, topic: TopicRef? = nil, expiresAt: Date? = nil, callId: String? = nil,
+        followUpDraft: String? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -336,6 +339,7 @@ public struct Nudge: Codable, Sendable, Hashable, Identifiable {
         self.topic = topic
         self.expiresAt = expiresAt
         self.callId = callId
+        self.followUpDraft = followUpDraft
     }
 }
 

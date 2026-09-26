@@ -6,7 +6,7 @@ const users: TestUser[] = [];
 afterAll(() => cleanup(...users));
 
 describe('queued delays', { timeout: 420_000 }, () => {
-  it('NUD-4/10: pre-check fires after ~60 s, expiry after ~180 s sends the follow-up', async () => {
+  it('NUD-4/10: pre-check fires after ~60 s, expiry after ~180 s drafts the follow-up', async () => {
     const a = await makeUser('qa');
     const b = await makeUser('qb');
     users.push(a, b);
@@ -26,11 +26,10 @@ describe('queued delays', { timeout: 420_000 }, () => {
     const t1 = Date.now();
     await until(async () => (await a.req('GET', `/nudges/${id}`)).state === 'expired', 260_000, 5000);
     console.log(`expired after ${((Date.now() - t1) / 1000).toFixed(0)} s from accept`);
-    const msgs = await until(async () => {
-      const m = (await a.req('GET', `/friends/${b.id}/messages`)).messages;
-      return m.some((x: any) => x.kind === 'auto_followup') ? m : undefined;
-    });
-    expect(msgs.find((m: any) => m.kind === 'auto_followup').senderId).toBe(b.id);
+    const draft = await until(async () => (await b.req('GET', `/nudges/${id}`)).followUpDraft);
+    await b.req('POST', `/nudges/${id}/followup`, { action: 'send' });
+    const msgs = (await a.req('GET', `/friends/${b.id}/messages`)).messages;
+    expect(msgs.find((m: any) => m.kind === 'auto_followup')).toMatchObject({ senderId: b.id, body: draft });
   });
 
   it('MEM-2: the summarize queue produces the summary without the dev hook', async () => {

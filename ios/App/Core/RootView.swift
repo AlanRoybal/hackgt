@@ -1,5 +1,6 @@
 import DesignSystem
 import Models
+import Nudges
 import SwiftUI
 
 /// Auth → ToS → Handle → Setup → Tabs (SPEC §4.2).
@@ -116,7 +117,13 @@ struct MainView: View {
         }
         .overlay(alignment: .top) { NudgeBannerOverlay() }
         .overlay(alignment: .bottom) { ToastOverlay() }
+        .sheet(item: followUpBinding) { FollowUpApprovalSheet(draft: $0) }
         .fullScreenCover(isPresented: flowPresented) { FlowContainer() }
+    }
+
+    /// Swiping the sheet away leaves the draft unsent; the notification stays so it can still be approved later.
+    private var followUpBinding: Binding<FollowUpDraft?> {
+        Binding(get: { app.nudges.followUp }, set: { if $0 == nil { app.nudges.dismissFollowUp() } })
     }
 
     private var flowPresented: Binding<Bool> {
