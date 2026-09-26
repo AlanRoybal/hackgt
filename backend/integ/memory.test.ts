@@ -63,15 +63,20 @@ describe('memory', () => {
     expect(await segCount(callId)).toBe(0);
     const s = await b.req('GET', `/calls/${callId}/summary`);
     expect(s.summary.length).toBeGreaterThan(10);
+    // Names, not the transcript's A/B labels.
+    expect(s.summary).not.toMatch(/\b(A and B|B and A)\b/);
+    expect(s.summary).toMatch(/mema|memb/i);
     const exam = s.topics.find((t: any) => /physics|exam/i.test(t.title));
     expect(exam).toBeTruthy();
     expect(exam.aboutUserId).toBe(a.id);
-    expect(exam.followUpAfter).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // A full ISO timestamp: the iOS decoder rejects a bare day and would drop the whole payload.
+    expect(exam.followUpAfter).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/);
     // Both see memories; either can delete, and it's gone for both.
     const ma = await a.req('GET', `/friends/${b.id}/memories`);
     const mb = await b.req('GET', `/friends/${a.id}/memories`);
     expect(ma.topics.length).toBe(mb.topics.length);
     expect(mb.summaries[0].callId).toBe(callId);
+    expect(mb.topics.every((t: any) => !t.followUpAfter || t.followUpAfter.endsWith('T00:00:00.000Z'))).toBe(true);
     await b.req('DELETE', `/friends/${a.id}/topics/${exam.id}`);
     expect((await a.req('GET', `/friends/${b.id}/memories`)).topics.find((t: any) => t.id === exam.id)).toBeUndefined();
     await a.req('DELETE', `/friends/${b.id}/summaries/${callId}`);
@@ -113,7 +118,7 @@ describe('memory', () => {
     expect(topics.length).toBeGreaterThanOrEqual(1);
     // Make one topic due now by matching after its followUpAfter date, and bypass the post-call pair cooldown.
     const topic = topics[0];
-    const matchAt = new Date(Date.parse(`${topic.followUpAfter}T12:00:00Z`) + 86_400_000 * 4).toISOString();
+    const matchAt = new Date(Date.parse(`${topic.followUpAfter.slice(0, 10)}T12:00:00Z`) + 86_400_000 * 4).toISOString();
     for (const u of [a, b]) {
       await u.req('PUT', '/me/availability', { busyBlocks: [], syncedAt: matchAt, source: 'apple', tz: 'UTC' });
     }
