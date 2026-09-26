@@ -341,6 +341,7 @@ AuthTokens   { accessToken, idToken, refreshToken?, expiresIn, userId, isNew }
 | POST `/calls/{id}/end` | — | 204 |
 | GET `/calls/{id}/summary` | — | `CallSummary` · 202 `{pending:true}` |
 | POST `/calls/{id}/shares` | `{ photoId, suggestionId? }` | `{ shareId, thumbUrl }` |
+| POST `/calls/{id}/suggestions/{suggestionId}/feedback` | `{ outcome: "dismissed" }` | 204 |
 | GET `/calls/{id}/shares/{shareId}` | — | `{ url, expiresAt }` (recipient only; presigned 5 min) |
 | POST `/calls/{id}/shares/{shareId}/shown` | `{ shownAt, durationMs }` | 204 |
 

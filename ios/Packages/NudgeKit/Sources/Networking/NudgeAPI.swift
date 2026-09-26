@@ -219,6 +219,11 @@ public struct NudgeAPI: Sendable {
         try await client.request(.post, "/calls/\(callId)/shares", body: ShareBody(photoId: photoId, suggestionId: suggestionId))
     }
 
+    private struct SuggestionFeedbackBody: Encodable, Sendable { let outcome: String }
+    public func dismissSuggestion(callId: String, suggestionId: String) async throws {
+        try await client.send(.post, "/calls/\(callId)/suggestions/\(suggestionId)/feedback", body: SuggestionFeedbackBody(outcome: "dismissed"))
+    }
+
     public func shareURL(callId: String, shareId: String) async throws -> ShareURL {
         try await client.request(.get, "/calls/\(callId)/shares/\(shareId)")
     }

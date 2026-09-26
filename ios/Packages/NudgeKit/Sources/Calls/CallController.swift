@@ -254,7 +254,10 @@ public final class CallController {
         photos?.share(OutgoingPhoto(photoId: s.photoId, suggestionId: s.suggestionId, image: .url(s.thumbUrl)))
     }
 
-    public func dismissSuggestion() { suggestion = nil }
+    public func dismissSuggestion(_ dismissed: PhotoSuggestion) {
+        if suggestion?.id == dismissed.id { suggestion = nil }
+        Task { try? await api.dismissSuggestion(callId: dismissed.callId, suggestionId: dismissed.suggestionId) }
+    }
 
     /// Hide pill in automatic mode, or swipe on my own photo.
     public func hideMine() {

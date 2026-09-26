@@ -90,7 +90,20 @@ export const handler = router({
       suggestionId: typeof body.suggestionId === 'string' ? body.suggestionId : undefined,
       createdAt: new Date().toISOString(),
     });
+    if (typeof body.suggestionId === 'string') {
+      const suggestion = await get(K.suggestion(c.id, body.suggestionId));
+      if (suggestion?.userId === userId) await update(K.suggestion(c.id, body.suggestionId), { outcome: 'shared', sharedAt: new Date().toISOString() });
+    }
     return { shareId, thumbUrl: await presignGet(photo.s3Key, SHARE_URL_TTL_S) };
+  },
+
+  'POST /calls/{id}/suggestions/{suggestionId}/feedback': async ({ userId, params, body }) => {
+    await participantCall(params.id, userId);
+    const suggestion = await get(K.suggestion(params.id, params.suggestionId));
+    if (!suggestion || suggestion.userId !== userId) throw notFound('suggestion_not_found');
+    const outcome = body.outcome === 'dismissed' ? 'dismissed' : undefined;
+    if (!outcome) throw bad('invalid_feedback');
+    await update(K.suggestion(params.id, params.suggestionId), { outcome, feedbackAt: new Date().toISOString() });
   },
 
   'GET /calls/{id}/shares/{shareId}': async ({ userId, params }) => {

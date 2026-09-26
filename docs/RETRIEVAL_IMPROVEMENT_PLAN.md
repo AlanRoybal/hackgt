@@ -61,6 +61,8 @@ For “remember the restaurant with all the lanterns?” search both `restaurant
 
 The image vector matches visual concepts; the caption and metadata better capture names, activities, venues, and time references spoken on a call.
 
+After the infrastructure change is deployed, run `npm run backfill:captions` with the deployed table, vector-bucket, and caption-index environment variables so existing indexed photos receive a caption vector too.
+
 ### 5. Rerank only the finalists
 
 **Implement**
@@ -93,4 +95,3 @@ Cosine similarity is a good recall stage. A small, bounded reasoning pass is bet
 ## Non-goal
 
 Do not replace Titan or add a GPU-hosted model until this improved pipeline is measured. If results remain weak after these steps, A/B test dedicated image-text embedding models on the same real evaluation set and select one based on accuracy, latency, cost, and operational complexity.
-

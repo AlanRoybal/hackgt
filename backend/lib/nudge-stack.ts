@@ -329,6 +329,7 @@ export class NudgeStack extends Stack {
     for (const [m, p] of [
       ['GET', '/calls/{id}/join'], ['POST', '/calls/{id}/end'], ['GET', '/calls/{id}/summary'], ['POST', '/calls/{id}/shares'],
       ['GET', '/calls/{id}/shares/{shareId}'], ['POST', '/calls/{id}/shares/{shareId}/shown'],
+      ['POST', '/calls/{id}/suggestions/{suggestionId}/feedback'],
     ]) route(m, p, callsFn);
 
     for (const [m, p] of [
@@ -381,6 +382,7 @@ export class NudgeStack extends Stack {
     new CfnOutput(this, 'IdentityPoolId', { value: identityPool.ref });
     new CfnOutput(this, 'MediaBucket', { value: bucket.bucketName });
     new CfnOutput(this, 'VectorBucketName', { value: vectorBucketName });
+    new CfnOutput(this, 'CaptionVectorIndexName', { value: 'photo-captions' });
     new CfnOutput(this, 'TableName', { value: table.tableName });
   }
 }

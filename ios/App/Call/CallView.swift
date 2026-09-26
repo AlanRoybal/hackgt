@@ -117,7 +117,7 @@ struct CallView: View {
         ZStack {
             if let s = call.suggestion {
                 SuggestionChip(suggestion: s, isPreview: app.isPreview,
-                               onShow: { call.showSuggestion(s) }, onDismiss: { call.dismissSuggestion() })
+                               onShow: { call.showSuggestion(s) }, onDismiss: { call.dismissSuggestion(s) })
                     .transition(.scale(scale: 0.9, anchor: below ? .top : .bottom).combined(with: .opacity))
             } else if let a = call.autoShown {
                 HidePill(name: call.peerName) { call.hideMine() }
