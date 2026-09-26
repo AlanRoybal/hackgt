@@ -329,7 +329,7 @@ export class NudgeStack extends Stack {
 
     for (const [m, p] of [
       ['GET', '/calls/{id}/join'], ['POST', '/calls/{id}/end'], ['GET', '/calls/{id}/summary'], ['POST', '/calls/{id}/shares'],
-      ['GET', '/calls/{id}/shares/{shareId}'], ['POST', '/calls/{id}/shares/{shareId}/shown'],
+      ['GET', '/calls/{id}/shares'], ['GET', '/calls/{id}/shares/{shareId}'], ['POST', '/calls/{id}/shares/{shareId}/shown'],
       ['POST', '/calls/{id}/suggestions/{suggestionId}/feedback'],
     ]) route(m, p, callsFn);
 

@@ -234,6 +234,13 @@ public struct NudgeAPI: Sendable {
         try await client.request(.get, "/calls/\(callId)/shares/\(shareId)")
     }
 
+    /// Photos shown during an ended call, for the summary screen (D-6 amendment).
+    public func callPhotos(callId: String) async throws -> [CallPhoto] {
+        struct Photos: Decodable, Sendable { let photos: [CallPhoto] }
+        let r: Photos = try await client.request(.get, "/calls/\(callId)/shares")
+        return r.photos
+    }
+
     struct ShownBody: Encodable, Sendable { let shownAt: Date; let durationMs: Int }
     public func markShown(callId: String, shareId: String, shownAt: Date, durationMs: Int) async throws {
         try await client.send(.post, "/calls/\(callId)/shares/\(shareId)/shown", body: ShownBody(shownAt: shownAt, durationMs: durationMs))

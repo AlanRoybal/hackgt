@@ -8,6 +8,8 @@ import { getFriendship, getUser, publicUser } from '../lib/users.js';
 import { queryPrefix } from '../lib/db.js';
 
 const SHARE_URL_TTL_S = 300;
+/** The post-call recap can list the call's photos for this long after it ends (D-6 amendment). */
+const RECAP_WINDOW_MS = 60 * 60 * 1000;
 
 async function participantCall(id: string, userId: string): Promise<CallItem> {
   const c = await getCall(id);
@@ -97,6 +99,25 @@ export const handler = router({
     const outcome = body.outcome === 'dismissed' ? 'dismissed' : undefined;
     if (!outcome) throw bad('invalid_feedback');
     await update(K.suggestion(params.id, params.suggestionId), { outcome, feedbackAt: new Date().toISOString() });
+  },
+
+  // Post-call recap: every photo either person showed, once each, oldest first. Photos since deleted are left out.
+  'GET /calls/{id}/shares': async ({ userId, params }) => {
+    const c = await participantCall(params.id, userId);
+    if (!c.endedAt) throw new HttpError(409, 'call_active');
+    if (Date.now() - Date.parse(c.endedAt) > RECAP_WINDOW_MS) return { photos: [] };
+    const shares = (await queryPrefix(`CALL#${c.id}`, 'SHARE#')).sort((x, y) => String(x.createdAt).localeCompare(String(y.createdAt)));
+    const seen = new Set<string>();
+    const photos = [];
+    for (const s of shares) {
+      const key = `${s.senderId}/${s.photoId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const photo = await get(K.photo(s.senderId, s.photoId));
+      if (!photo) continue;
+      photos.push({ shareId: s.shareId, senderId: s.senderId, url: await presignGet(s.s3Key, SHARE_URL_TTL_S), createdAt: s.createdAt });
+    }
+    return { photos };
   },
 
   'GET /calls/{id}/shares/{shareId}': async ({ userId, params }) => {

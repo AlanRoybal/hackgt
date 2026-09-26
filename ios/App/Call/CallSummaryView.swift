@@ -1,9 +1,11 @@
 import DesignSystem
 import Memory
 import Models
+import PhotoShare
 import SwiftUI
 
-/// MEM-6: duration + "We'll remember" chips (deletable). Closes itself after 10 s if ignored.
+/// MEM-6: duration + "We'll remember" chips (deletable) + the photos shown on the call.
+/// Closes itself 10 s after everything has loaded, if ignored.
 struct CallSummaryView: View {
     @Environment(AppModel.self) private var app
     @State private var interacted = false
@@ -19,8 +21,9 @@ struct CallSummaryView: View {
                 content(p, Beat(t: beat.t - Self.presentDelay, reduceMotion: beat.reduceMotion))
             }
             .nudgeBackground()
-            .task(id: interacted) {
-                guard !app.isPreview, !interacted else { return }
+            // The countdown starts only once the summary is in (or can't come), so the summary is never cut off mid-write.
+            .task(id: p.isSettled && !interacted) {
+                guard !app.isPreview, p.isSettled, !interacted else { return }
                 try? await Task.sleep(for: .seconds(10))
                 if !Task.isCancelled, !interacted { app.memory.dismissSummary() }
             }
@@ -65,6 +68,9 @@ struct CallSummaryView: View {
                         }
                     }
                     Text(s.summary).font(.subheadline).foregroundStyle(Palette.inkSecondary)
+                } else if p.summaryTimedOut {
+                    Text("The summary is taking longer than usual. It'll appear on \(p.friendName)'s profile.")
+                        .font(.subheadline).foregroundStyle(Palette.inkSecondary)
                 } else {
                     HStack(spacing: Space.xs) {
                         ProgressView().controlSize(.small)
@@ -77,11 +83,37 @@ struct CallSummaryView: View {
             .motionLayer(beat.fadeUp(at: 0.3, fade: 0.3, rise: 0.5, distance: 16))
             .padding(.horizontal, Space.margin)
 
+            if !p.photos.isEmpty { photos(p) }
+
             Spacer()
             NudgeButton("Done") { app.memory.dismissSummary() }
                 .motionLayer(beat.springUp(at: 0.95).tappable)
                 .padding(.horizontal, Space.margin)
                 .padding(.bottom, Space.m)
         }
+    }
+
+    private func photos(_ p: MemoryStore.PendingSummary) -> some View {
+        VStack(alignment: .leading, spacing: Space.s) {
+            HStack(spacing: Space.xs) {
+                Image(systemName: "photo.on.rectangle").foregroundStyle(Palette.butterStrong)
+                Text("Photos you shared").font(.headline).foregroundStyle(Palette.ink)
+            }
+            .padding(.horizontal, Space.margin)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Space.s) {
+                    ForEach(p.photos) { photo in
+                        // Screenshot mode has no server, so its fixtures name a bundled scene instead.
+                        PhotoContent(image: app.isPreview ? .placeholder(photo.shareId) : .url(photo.url))
+                            .frame(width: 96, height: 128)
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+                            .accessibilityLabel(photo.senderId == p.friendId ? "Photo from \(p.friendName)" : "Photo you showed")
+                    }
+                }
+                .padding(.horizontal, Space.margin)
+            }
+            .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in interacted = true })
+        }
+        .transition(.opacity)
     }
 }

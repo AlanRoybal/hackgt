@@ -171,6 +171,12 @@ describe('in-call references', () => {
     await b.req('POST', `/calls/${callId}/shares/${shareId}/shown`, { shownAt: new Date().toISOString(), durationMs: 6000 });
     await a.req('POST', `/calls/${callId}/end`);
     await expect(b.req('GET', `/calls/${callId}/shares/${shareId}`)).rejects.toBeInstanceOf(ApiError);
+    // The post-call recap still lists it for both people.
+    for (const who of [a, b]) {
+      const { photos } = await who.req('GET', `/calls/${callId}/shares`);
+      expect(photos.map((p: any) => p.shareId)).toContain(shareId);
+      expect(photos.find((p: any) => p.shareId === shareId).senderId).toBe(a.id);
+    }
   });
 
   it('REF-10: latency report', () => {

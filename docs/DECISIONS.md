@@ -12,7 +12,7 @@ Newest at the bottom. Each entry: decision, why, consequence.
 
 **D-5 No AWS SDK for Swift.** The prompt lists it as expected for Transcribe streaming, but it adds a very large dependency tree and slow builds. The app instead calls Cognito Identity (`GetId`, `GetCredentialsForIdentity`, plain JSON over HTTPS), SigV4-presigns the Transcribe streaming WebSocket URL with CryptoKit, and implements the small AWS event-stream binary codec (prelude + headers + CRC32). ~300 lines, fully unit-tested. Dependencies are Chime SDK and PhoneNumberKit only.
 
-**D-6 Photo share URL indirection.** Chime data messages are capped at 2 KB; a presigned S3 URL signed with Lambda session credentials can approach that. The `offer` carries a `shareId`; the recipient calls `GET /calls/{id}/shares/{shareId}` for the URL (+1 small request, inside the 800 ms budget). This also lets the server enforce "only the other participant of an active call".
+**D-6 Photo share URL indirection.** Chime data messages are capped at 2 KB; a presigned S3 URL signed with Lambda session credentials can approach that. The `offer` carries a `shareId`; the recipient calls `GET /calls/{id}/shares/{shareId}` for the URL (+1 small request, inside the 800 ms budget). This also lets the server enforce "only the other participant of an active call". Amended: after the call, `GET /calls/{id}/shares` lists the photos either person showed (fresh 5-minute URLs) so the summary screen can recap them. It works for one hour after the call ends and skips photos deleted since.
 
 **D-7 Delays via SQS, not Step Functions.** Pre-check (60 s), expiry (180 s) and summarize (30 s) use per-message `DelaySeconds` on SQS queues. Cheapest and simplest; max 900 s covers all cases.
 
