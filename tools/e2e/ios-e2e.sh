@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # End-to-end: the real iOS app in the simulator against the deployed dev backend, with the peer bot as the friend.
-# Usage: tools/e2e/ios-e2e.sh [app-e2e|app-closed] [simulator name]
+# Usage: tools/e2e/ios-e2e.sh [app-e2e|app-closed|app-calls] [simulator name]
 #   app-e2e    onboarding → friend → message → in-app nudge → call → bot's photo in the mini window → summary
 #   app-closed onboarding → app terminated → real matcher nudge delivered as a push → Accept on the
 #              notification launches the app → waiting room → call
+#   app-calls  onboarding → friend → app user taps Call now on the bot's profile → ringing (waiting room) →
+#              bot accepts → call
 # Set BOT_NO_MEDIA=1 if the Mac is locked (media capture is blocked for every process then).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -12,6 +14,7 @@ SIM_NAME="${2:-iPhone 17 Pro}"
 case "$SCENARIO" in
   app-e2e) TEST=testOnboardFriendMessageCallAndPhoto ;;
   app-closed) TEST=testNudgeArrivesWhileAppClosed ;;
+  app-calls) TEST=testAppUserCallsFromProfile ;;
   *) echo "unknown scenario $SCENARIO"; exit 2 ;;
 esac
 RUN="$(date +%s | tail -c 7)"
