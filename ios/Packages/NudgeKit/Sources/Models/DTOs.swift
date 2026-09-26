@@ -215,6 +215,14 @@ public struct Friend: Codable, Sendable, Hashable, Identifiable {
 
     /// The next moment this status stops being true: the free window closing or the busy stretch ending.
     public var statusChangesAt: Date? { freeNow ? freeUntil : busyUntil }
+
+    /// Include the day for future dates so tomorrow's time doesn't look expired today.
+    public func freeUntilText(now: Date = Date(), calendar: Calendar = .current) -> String? {
+        freeUntil.map {
+            $0.formatted(date: calendar.isDate($0, inSameDayAs: now) ? .omitted : .abbreviated,
+                         time: .shortened)
+        }
+    }
 }
 
 public enum Relation: String, Codable, Sendable {
