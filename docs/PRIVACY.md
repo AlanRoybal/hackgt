@@ -84,3 +84,7 @@ health information in a public issue.
 
 This policy may be updated as the prototype changes. The current version and its
 update date are published on this page.
+
+## Adaptive nudge timing
+
+We use responses to automatic invitations (accept, skip, or no response), invitation timestamps, and your time zone to adjust timing temporarily. Recent behavior has more influence, and automatic cooldowns expire. The engine uses at most 100 responses from the last 28 days; older entries are ignored and pruned on the next response. This private history stays on your account until replaced or deleted with the account, and is not shared with friends. No location data is needed for this feature.
