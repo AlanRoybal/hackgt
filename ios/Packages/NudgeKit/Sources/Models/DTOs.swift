@@ -620,20 +620,41 @@ public struct ShareCreated: Codable, Sendable, Hashable {
     public var thumbUrl: URL
 }
 
-/// A photo either person showed during a call, for the post-call recap. `url` expires after 5 minutes.
+/// A photo or video either person showed during a call, for the post-call recap. URLs expire after 5 minutes.
+/// For a video, `url` is its poster frame and `videoUrl` the clip; servers that predate video send neither `kind` nor `videoUrl`.
 public struct CallPhoto: Codable, Sendable, Hashable, Identifiable {
+    public enum Kind: String, Codable, Sendable, Hashable { case photo, video }
+
     public var shareId: String
     public var senderId: String
+    public var kind: Kind
     public var url: URL
+    public var videoUrl: URL?
     public var createdAt: Date
 
     public var id: String { shareId }
+    public var isVideo: Bool { kind == .video && videoUrl != nil }
+    /// What to save or share: the clip for a video, the image otherwise.
+    public var exportURL: URL { isVideo ? videoUrl ?? url : url }
 
-    public init(shareId: String, senderId: String, url: URL, createdAt: Date) {
+    public init(shareId: String, senderId: String, kind: Kind = .photo, url: URL, videoUrl: URL? = nil, createdAt: Date) {
         self.shareId = shareId
         self.senderId = senderId
+        self.kind = kind
         self.url = url
+        self.videoUrl = videoUrl
         self.createdAt = createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        shareId = try c.decode(String.self, forKey: .shareId)
+        senderId = try c.decode(String.self, forKey: .senderId)
+        // An unknown kind from a newer server falls back to a photo: its `url` is always an image.
+        kind = (try? c.decodeIfPresent(Kind.self, forKey: .kind)) ?? .photo
+        url = try c.decode(URL.self, forKey: .url)
+        videoUrl = try c.decodeIfPresent(URL.self, forKey: .videoUrl)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
     }
 }
 

@@ -106,6 +106,13 @@ public final class MemoryStore {
         pendingSummary?.summary = s
     }
 
+    /// Fetches new links for the summary's photos (they expire after 5 minutes), for export.
+    public func refreshPhotos(callId: String) async -> [CallPhoto]? {
+        guard let photos = try? await api.callPhotos(callId: callId) else { return nil }
+        if pendingSummary?.callId == callId { pendingSummary?.photos = photos }
+        return photos
+    }
+
     public func dismissSummary() {
         pollTask?.cancel()
         photosTask?.cancel()

@@ -9,6 +9,7 @@ import SwiftUI
 struct CallSummaryView: View {
     @Environment(AppModel.self) private var app
     @State private var interacted = false
+    @State private var exportStatus = ExportStatus.idle
 
     /// The outro starts once the summary has slid in (FlowContainer's move transition).
     static let presentDelay = Motion.Durations.move
@@ -94,10 +95,29 @@ struct CallSummaryView: View {
     }
 
     private func photos(_ p: MemoryStore.PendingSummary) -> some View {
-        VStack(alignment: .leading, spacing: Space.s) {
-            HStack(spacing: Space.xs) {
-                Image(systemName: "photo.on.rectangle").foregroundStyle(Palette.butterStrong)
-                Text("Photos you shared").font(.headline).foregroundStyle(Palette.ink)
+        let hasVideo = p.photos.contains(where: \.isVideo)
+        return VStack(alignment: .leading, spacing: Space.s) {
+            AdaptiveStack(spacing: Space.xs) {
+                HStack(spacing: Space.xs) {
+                    Image(systemName: "photo.on.rectangle").foregroundStyle(Palette.butterStrong)
+                    Text(hasVideo ? "Photos and videos you shared" : "Photos you shared").font(.headline).foregroundStyle(Palette.ink)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Menu {
+                    Button("Save All to Photos", systemImage: "square.and.arrow.down") { export(p.photos, callId: p.callId, to: .photos) }
+                    Button("Share…", systemImage: "square.and.arrow.up") { export(p.photos, callId: p.callId, to: .shareSheet) }
+                } label: {
+                    Group {
+                        if exportStatus == .working { ProgressView().controlSize(.small) } else { Text("Save") }
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Palette.lavenderStrong)
+                    .padding(.horizontal, Space.s)
+                    .frame(minWidth: 44, minHeight: 34)
+                    .background(Palette.lavender, in: Capsule())
+                }
+                .disabled(exportStatus == .working)
+                .accessibilityLabel(hasVideo ? "Save photos and videos" : "Save photos")
             }
             .padding(.horizontal, Space.margin)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -106,14 +126,107 @@ struct CallSummaryView: View {
                         // Screenshot mode has no server, so its fixtures name a bundled scene instead.
                         PhotoContent(image: app.isPreview ? .placeholder(photo.shareId) : .url(photo.url))
                             .frame(width: 96, height: 128)
+                            .overlay(alignment: .bottomLeading) {
+                                if photo.isVideo {
+                                    Image(systemName: "play.fill").font(.caption.weight(.bold)).foregroundStyle(.white)
+                                        .padding(6).background(.black.opacity(0.45), in: Circle()).padding(6)
+                                        .accessibilityHidden(true)
+                                }
+                            }
                             .clipShape(RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                            .accessibilityLabel(photo.senderId == p.friendId ? "Photo from \(p.friendName)" : "Photo you showed")
+                            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+                            .contextMenu {
+                                Button("Save to Photos", systemImage: "square.and.arrow.down") { export([photo], callId: p.callId, to: .photos) }
+                                Button("Share…", systemImage: "square.and.arrow.up") { export([photo], callId: p.callId, to: .shareSheet) }
+                            }
+                            .accessibilityLabel(label(for: photo, in: p))
                     }
                 }
                 .padding(.horizontal, Space.margin)
             }
             .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in interacted = true })
+            exportMessage.padding(.horizontal, Space.margin)
         }
         .transition(.opacity)
     }
+
+    private func label(for photo: CallPhoto, in p: MemoryStore.PendingSummary) -> String {
+        let noun = photo.isVideo ? "Video" : "Photo"
+        return photo.senderId == p.friendId ? "\(noun) from \(p.friendName)" : "\(noun) you showed"
+    }
+
+    @ViewBuilder private var exportMessage: some View {
+        switch exportStatus {
+        case .saved(let count, let videos):
+            Label(savedText(count: count, videos: videos), systemImage: "checkmark.circle.fill")
+                .font(.footnote).foregroundStyle(Palette.inkSecondary).transition(.opacity)
+        case .noAccess:
+            HStack(spacing: Space.xs) {
+                Text("Nudge needs permission to add to Photos.").font(.footnote).foregroundStyle(Palette.inkSecondary)
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+                .font(.footnote.weight(.semibold)).foregroundStyle(Palette.lavenderStrong)
+            }
+        case .failed:
+            Text("Couldn't save. Check your connection and try again.").font(.footnote).foregroundStyle(Palette.roseStrong)
+        case .idle, .working:
+            EmptyView()
+        }
+    }
+
+    private func savedText(count: Int, videos: Int) -> String {
+        let photos = count - videos
+        switch (photos, videos) {
+        case (_, 0): return photos == 1 ? "Saved to Photos" : "Saved \(photos) photos to Photos"
+        case (0, _): return videos == 1 ? "Saved to Photos" : "Saved \(videos) videos to Photos"
+        default: return "Saved \(count) items to Photos"
+        }
+    }
+
+    private enum Destination { case photos, shareSheet }
+
+    /// Downloads the items, then saves them or opens the share sheet. Any export keeps the screen from auto-closing.
+    private func export(_ items: [CallPhoto], callId: String, to destination: Destination) {
+        interacted = true
+        // Screenshot mode's photos are bundled scenes with no files behind them.
+        guard !app.isPreview else { return }
+        exportStatus = .working
+        let memory = app.memory
+        Task {
+            do {
+                let files = try await CallMediaExport.download(items, refresh: { await memory.refreshPhotos(callId: callId) })
+                switch destination {
+                case .shareSheet:
+                    exportStatus = .idle
+                    presentShareSheet(files)
+                case .photos:
+                    defer { CallMediaExport.discard(files) }
+                    try await CallMediaExport.saveToPhotos(files)
+                    exportStatus = .saved(count: files.count, videos: files.filter { $0.kind == .video }.count)
+                }
+            } catch CallMediaExport.Failure.photosAccessDenied {
+                exportStatus = .noAccess
+            } catch {
+                exportStatus = .failed
+            }
+        }
+    }
+}
+
+private enum ExportStatus: Equatable {
+    case idle, working, saved(count: Int, videos: Int), noAccess, failed
+}
+
+/// The system share sheet, presented from UIKit so the downloaded files can be deleted once it closes,
+/// whatever the person picked.
+@MainActor private func presentShareSheet(_ files: [CallMediaExport.File]) {
+    let sheet = UIActivityViewController(activityItems: files.map(\.url), applicationActivities: nil)
+    sheet.completionWithItemsHandler = { _, _, _, _ in CallMediaExport.discard(files) }
+    let root = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.rootViewController
+    var top = root
+    while let next = top?.presentedViewController { top = next }
+    guard let top else { return CallMediaExport.discard(files) }
+    sheet.popoverPresentationController?.sourceView = top.view
+    top.present(sheet, animated: true)
 }
