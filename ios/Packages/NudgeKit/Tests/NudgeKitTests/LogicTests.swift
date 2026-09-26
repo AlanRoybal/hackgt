@@ -93,21 +93,21 @@ struct DrivingTests {
     }
 }
 
-@Suite("ShareLink — ACC-8")
+@Suite("AddFriendLink — ACC-8")
 struct ShareLinkTests {
     @Test func parses() {
-        #expect(ShareLink.handle(from: URL(string: "nudge://add/alan.r")!) == "alan.r")
-        #expect(ShareLink.handle(from: URL(string: "NUDGE://add/Alan")!) == "alan")
-        #expect(ShareLink.handle(from: URL(string: "nudge://add/")!) == nil)
-        #expect(ShareLink.handle(from: URL(string: "nudge://call/alan")!) == nil)
-        #expect(ShareLink.handle(from: URL(string: "https://add/alan")!) == nil)
-        #expect(ShareLink.handle(from: URL(string: "nudge://add/a")!) == nil)
-        #expect(ShareLink.handle(from: URL(string: "nudge://add/alan/extra")!) == nil)
+        #expect(AddFriendLink.handle(from: URL(string: "nudge://add/alan.r")!) == "alan.r")
+        #expect(AddFriendLink.handle(from: URL(string: "NUDGE://add/Alan")!) == "alan")
+        #expect(AddFriendLink.handle(from: URL(string: "nudge://add/")!) == nil)
+        #expect(AddFriendLink.handle(from: URL(string: "nudge://call/alan")!) == nil)
+        #expect(AddFriendLink.handle(from: URL(string: "https://add/alan")!) == nil)
+        #expect(AddFriendLink.handle(from: URL(string: "nudge://add/a")!) == nil)
+        #expect(AddFriendLink.handle(from: URL(string: "nudge://add/alan/extra")!) == nil)
     }
 
     @Test func builds() {
-        #expect(ShareLink.url(for: "@Alan").absoluteString == "nudge://add/alan")
-        #expect(ShareLink.shareText(for: "alan").contains("@alan"))
+        #expect(AddFriendLink.url(for: "@Alan").absoluteString == "nudge://add/alan")
+        #expect(AddFriendLink.shareText(for: "alan").contains("@alan"))
     }
 }
 

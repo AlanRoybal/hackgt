@@ -2,7 +2,7 @@ import Foundation
 import Models
 
 /// `nudge://add/<handle>` (D-13).
-public enum ShareLink {
+public enum AddFriendLink {
     public static let scheme = "nudge"
 
     public static func url(for handle: String) -> URL {

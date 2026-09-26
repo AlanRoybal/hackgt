@@ -1,0 +1,5 @@
+// Signing — fill these in from docs/APPLE_SETUP.md (friend's team).
+// DEVELOPMENT_TEAM is the 10-character Team ID. Leave empty to build for the simulator unsigned.
+DEVELOPMENT_TEAM =
+NUDGE_BUNDLE_ID = app.nudge.dev
+CODE_SIGN_STYLE = Automatic

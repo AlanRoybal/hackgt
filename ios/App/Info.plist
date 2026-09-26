@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.nudge.refresh</string>
+		<string>app.nudge.photos</string>
+	</array>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Nudge</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.nudge.add</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>nudge</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Nudge checks when you're busy so it can tell when you and a friend are both free. Only busy times are shared, never event names.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Your camera is used for video calls.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Nudge checks which of your contacts use Nudge. Numbers are scrambled on your phone before anything is sent.</string>
+	<key>NSFocusStatusUsageDescription</key>
+	<string>Nudge won't nudge you while a Focus is on.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Your microphone is used for calls, and to find photos you mention.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Nudge won't nudge you while you're driving.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Nudge analyzes photos from the last 30 days so the ones you mention on a call can appear. Only photos you choose to show are sent to your friend.</string>
+	<key>NudgeAPIBaseURL</key>
+	<string>$(NUDGE_API_BASE_URL)</string>
+	<key>NudgeAppGroup</key>
+	<string>group.$(NUDGE_BUNDLE_ID)</string>
+	<key>NudgeWebSocketURL</key>
+	<string>$(NUDGE_WS_URL)</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>voip</string>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+</dict>
+</plist>
