@@ -3,7 +3,7 @@ import { batchDelete, del, queryGsi, queryPartition, type Key } from './db.js';
 import { deleteCognitoUser } from './cognito.js';
 import { K, pairKey } from './keys.js';
 import { avatarKey, deleteObject, deletePrefix } from './s3.js';
-import { deleteVectors } from './vectors.js';
+import { deletePhotoVectors } from './vectors.js';
 import type { UserItem } from './users.js';
 
 export async function deleteAccount(user: UserItem): Promise<void> {
@@ -13,7 +13,7 @@ export async function deleteAccount(user: UserItem): Promise<void> {
 
   // Vectors for indexed photos.
   const vectorKeys = own.filter((i) => i.sk.startsWith('PHOTO#') && i.vectorKey).map((i) => i.vectorKey as string);
-  if (vectorKeys.length) await deleteVectors(vectorKeys);
+  if (vectorKeys.length) await deletePhotoVectors(vectorKeys);
 
   // Friendships (reverse side) and all pair data (messages, topics, summaries, nudges, calls).
   const friendIds = own.filter((i) => i.sk.startsWith('FRIEND#')).map((i) => i.sk.slice('FRIEND#'.length));

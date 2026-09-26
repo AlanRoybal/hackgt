@@ -20,6 +20,8 @@ export const env = {
   get summarizeQueueUrl() { return req('SUMMARIZE_QUEUE_URL'); },
   get vectorBucket() { return req('VECTOR_BUCKET'); },
   get vectorIndex() { return process.env.VECTOR_INDEX ?? 'photos'; },
+  /** Empty until the caption index has been deployed. */
+  get captionVectorIndex() { return process.env.CAPTION_VECTOR_INDEX ?? ''; },
   get currentTosVersion() { return process.env.TOS_VERSION ?? '2026-09-26'; },
   get similarityThreshold() { return Number(process.env.SIMILARITY_THRESHOLD ?? '0.37'); },
 };

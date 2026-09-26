@@ -15,6 +15,7 @@ export const K = {
   block: (a: string, b: string) => ({ pk: `USER#${a}`, sk: `BLOCK#${b}` }),
   nudge: (id: string) => ({ pk: `NUDGE#${id}`, sk: 'META' }),
   call: (id: string) => ({ pk: `CALL#${id}`, sk: 'META' }),
+  suggestion: (callId: string, suggestionId: string) => ({ pk: `CALL#${callId}`, sk: `SUGG#${suggestionId}` }),
   share: (callId: string, shareId: string) => ({ pk: `CALL#${callId}`, sk: `SHARE#${shareId}` }),
   photo: (id: string, assetHash: string) => ({ pk: `USER#${id}`, sk: `PHOTO#${assetHash}` }),
   topic: (pk: string, id: string) => ({ pk: `PAIR#${pk}`, sk: `TOPIC#${id}` }),

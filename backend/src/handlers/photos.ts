@@ -3,7 +3,7 @@ import { batchDelete, batchGet, del, get, put, queryPrefix } from '../lib/db.js'
 import { bad, router } from '../lib/http.js';
 import { K } from '../lib/keys.js';
 import { deleteObject, deletePrefix, photoKey, presignPut } from '../lib/s3.js';
-import { deleteVectors } from '../lib/vectors.js';
+import { deletePhotoVectors } from '../lib/vectors.js';
 import { getUser } from '../lib/users.js';
 
 const WINDOW_MS = 30 * 86_400_000;
@@ -64,7 +64,7 @@ export const handler = router({
   'DELETE /photos/{assetHash}': async ({ userId, params }) => {
     const p = await get(K.photo(userId, params.assetHash));
     if (!p) return;
-    if (p.vectorKey) await deleteVectors([p.vectorKey]);
+    if (p.vectorKey) await deletePhotoVectors([p.vectorKey]);
     await deleteObject(p.s3Key).catch(() => {});
     await del(K.photo(userId, params.assetHash));
   },
@@ -72,7 +72,7 @@ export const handler = router({
   'DELETE /photos': async ({ userId }) => {
     const photos = await queryPrefix(`USER#${userId}`, 'PHOTO#');
     const vk = photos.map((p) => p.vectorKey).filter(Boolean) as string[];
-    if (vk.length) await deleteVectors(vk);
+    if (vk.length) await deletePhotoVectors(vk);
     await deletePrefix(`photos/${userId}/`);
     await batchDelete(photos.map((p) => ({ pk: p.pk, sk: p.sk })));
   },

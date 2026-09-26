@@ -9,6 +9,10 @@ export interface Segment {
 export interface Detection {
   isReference: boolean;
   query: string;
+  /** Search views generated from the same spoken reference. `query` remains the fallback. */
+  literalQuery?: string;
+  visualQuery?: string;
+  entityQuery?: string;
   dateHint?: { from?: string; to?: string };
   placeHint?: string;
   confidence: number;
@@ -31,10 +35,15 @@ Answer NO when the last line is:
 When it is a reference, write "query": a short visual search phrase (3–8 words) describing what SPEAKER's photo of the LAST LINE's subject would show, built from the LAST LINE's words (earlier lines only to resolve "it"/"that"). Do not invent details that weren't said.
 "dateHint": ISO dates {"from","to"} only if SPEAKER gives a time ("last weekend", "yesterday", "on the 12th"); resolve against TODAY. Otherwise omit it.
 "placeHint": a place name only if one is said. Otherwise omit it.
+Also return three short search views when isReference is true:
+- "literalQuery": the subject using SPEAKER's own words
+- "visualQuery": what a matching camera-roll photo would visibly show
+- "entityQuery": the named activity, place, event, food, object, or person if one was said; otherwise ""
+
 "confidence": a number from 0 to 1.
 
 Reply with one JSON object only, using the literal values true or false for isReference:
-{"isReference": true, "query": "...", "dateHint": {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}, "placeHint": "...", "confidence": 0.8}
+{"isReference": true, "query": "...", "literalQuery": "...", "visualQuery": "...", "entityQuery": "...", "dateHint": {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}, "placeHint": "...", "confidence": 0.8}
 or {"isReference": false, "query": "", "confidence": 0.9}`;
 
 export function formatTranscript(segments: Segment[], speakerId: string): string {
@@ -75,8 +84,18 @@ export async function detectReference(segments: Segment[], speakerId: string, no
   return {
     isReference: j.isReference && !!j.query?.trim(),
     query: (j.query ?? '').trim(),
+    literalQuery: j.literalQuery?.trim() || undefined,
+    visualQuery: j.visualQuery?.trim() || undefined,
+    entityQuery: j.entityQuery?.trim() || undefined,
     dateHint,
     placeHint: j.placeHint?.trim() || undefined,
     confidence: typeof j.confidence === 'number' ? Math.max(0, Math.min(1, j.confidence)) : j.isReference ? 0.7 : 0,
   };
+}
+
+/** Unique, short retrieval queries. Keeping this pure makes query behavior easy to evaluate. */
+export function retrievalQueries(detection: Detection): string[] {
+  return [...new Set([detection.literalQuery, detection.visualQuery, detection.entityQuery, detection.query]
+    .map((q) => q?.trim().slice(0, 300))
+    .filter((q): q is string => !!q))];
 }

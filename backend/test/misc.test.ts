@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { extractJson } from '../src/ai/bedrock.js';
-import { formatTranscript } from '../src/ai/detector.js';
+import { formatTranscript, retrievalQueries } from '../src/ai/detector.js';
+import { parseRerank } from '../src/ai/rerank.js';
 import { pairKey, segSk } from '../src/lib/keys.js';
 import { validateSettingsPatch } from '../src/lib/settings.js';
-import { dateRange, pickHit } from '../src/lib/references.js';
+import { dateRange, fusePhotoHits, pickHit } from '../src/lib/references.js';
 import { cutoffSec } from '../src/handlers/photoSweep.js';
 import { payloads } from '../src/lib/push.js';
 
@@ -25,6 +26,30 @@ describe('extractJson', () => {
 describe('detector transcript formatting', () => {
   it('labels the speaker and friend', () => {
     expect(formatTranscript([{ userId: 'a', text: 'hi' }, { userId: 'b', text: 'yo' }], 'b')).toBe('FRIEND: hi\nSPEAKER: yo');
+  });
+});
+
+describe('retrieval query views', () => {
+  it('keeps unique generated views and compatibility query', () => {
+    expect(retrievalQueries({
+      isReference: true,
+      query: 'restaurant lanterns',
+      literalQuery: 'lantern restaurant',
+      visualQuery: 'restaurant with lanterns',
+      entityQuery: 'lantern restaurant',
+      confidence: 0.9,
+    })).toEqual(['lantern restaurant', 'restaurant with lanterns', 'restaurant lanterns']);
+  });
+});
+
+describe('photo reranker parsing', () => {
+  const candidates = [{ key: 'u#one' }, { key: 'u#two' }];
+  it('maps a one-based model choice back to a vector key', () => {
+    expect(parseRerank('{"choice":2,"confidence":0.8}', candidates)).toEqual({ key: 'u#two', confidence: 0.8 });
+  });
+  it('accepts an explicit no-match and rejects invalid choices', () => {
+    expect(parseRerank('{"choice":null,"confidence":0.9}', candidates)).toEqual({ confidence: 0 });
+    expect(parseRerank('{"choice":3,"confidence":0.9}', candidates)).toBeUndefined();
   });
 });
 
@@ -53,6 +78,14 @@ describe('reference helpers', () => {
     expect(pickHit(hits, 0.2, new Set())?.key).toBe('u#1');
     expect(pickHit(hits, 0.2, new Set(['u#1']))?.key).toBe('u#2');
     expect(pickHit(hits, 0.5, new Set())).toBeUndefined();
+  });
+  it('fuses image and caption ranks and applies a small place boost', () => {
+    const image = [[
+      { key: 'u#a', similarity: 0.5, metadata: { caption: 'plain cafe' } },
+      { key: 'u#b', similarity: 0.49, metadata: { place: 'Atlanta cafe' } },
+    ]];
+    const caption = [[{ key: 'u#b', similarity: 0.42, metadata: { caption: 'lantern cafe', place: 'Atlanta cafe' } }]];
+    expect(fusePhotoHits(image, caption, 'Atlanta').map((x) => x.key)).toEqual(['u#b', 'u#a']);
   });
 });
 
