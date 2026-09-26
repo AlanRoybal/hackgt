@@ -216,12 +216,18 @@ public struct Friend: Codable, Sendable, Hashable, Identifiable {
     /// The next moment this status stops being true: the free window closing or the busy stretch ending.
     public var statusChangesAt: Date? { freeNow ? freeUntil : busyUntil }
 
-    /// Include the day for future dates so tomorrow's time doesn't look expired today.
+    /// Compact, date-aware text shared by cards, rows, and profiles (e.g. "Sun 3 PM").
     public func freeUntilText(now: Date = Date(), calendar: Calendar = .current) -> String? {
-        freeUntil.map {
-            $0.formatted(date: calendar.isDate($0, inSameDayAs: now) ? .omitted : .abbreviated,
-                         time: .shortened)
-        }
+        guard let until = freeUntil else { return nil }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now),
+                                           to: calendar.startOfDay(for: until)).day ?? 0
+        let day = days == 0 ? "" : (days > 0 && days < 7 ? "EEE" : "MMMd")
+        let time = calendar.component(.minute, from: until) == 0 ? "j" : "jm"
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate(day + time)
+        return formatter.string(from: until)
     }
 }
 
