@@ -54,15 +54,27 @@ struct EventStreamTests {
 
 @Suite("Transcript batching")
 struct TranscriptBatcherTests {
-    @Test func mergesAdjacentFinalSegments() async {
+    @Test func continuousSpeechDoesNotResetTheTimer() async throws {
+        let collector = SegmentCollector()
+        let batcher = TranscriptBatcher(delay: .milliseconds(40)) { await collector.append($0) }
+        for i in 0..<20 {
+            var update = TranscriptSegment(callId: "c", segId: "one", text: "I ate ramen in Houston \(i)", startMs: 0, endMs: i * 20, clientTs: 1)
+            update.isPartial = true
+            await batcher.append(update)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(!(await collector.values).isEmpty)
+        await batcher.finish()
+    }
+    @Test func finalsAreSentImmediately() async {
         let collector = SegmentCollector()
         let batcher = TranscriptBatcher(delay: .seconds(60)) { await collector.append($0) }
         await batcher.append(TranscriptSegment(callId: "c", segId: "one", text: "remember the", startMs: 0, endMs: 500, clientTs: 1))
         await batcher.append(TranscriptSegment(callId: "c", segId: "two", text: "restaurant with lanterns", startMs: 550, endMs: 1_200, clientTs: 2))
         await batcher.flush()
         let sent = await collector.values
-        #expect(sent.count == 1)
-        #expect(sent.first?.text == "remember the restaurant with lanterns")
+        #expect(sent.count == 2)
+        #expect(sent.first?.text == "remember the")
     }
 
     @Test func flushesWhenThereIsASpeechGap() async {
@@ -72,6 +84,46 @@ struct TranscriptBatcherTests {
         await batcher.append(TranscriptSegment(callId: "c", segId: "two", text: "anyway", startMs: 4_000, endMs: 4_200, clientTs: 2))
         await batcher.flush()
         #expect((await collector.values).map(\.text) == ["we went hiking", "anyway"])
+    }
+
+    @Test func partialRevisionsReplaceInsteadOfConcatenate() async {
+        let collector = SegmentCollector()
+        let batcher = TranscriptBatcher(delay: .seconds(60)) { await collector.append($0) }
+        var update = TranscriptSegment(callId: "c", segId: "one", text: "I ate ramen in Houston", startMs: 0, endMs: 1000, clientTs: 1)
+        update.isPartial = true
+        await batcher.append(update)
+        update.text = "I ate ramen in Houston Chinatown"
+        await batcher.append(update)
+        await batcher.flush()
+        await batcher.append(update)
+        await batcher.flush()
+        let sent = await collector.values
+        #expect(sent.count == 1)
+        #expect(sent.first?.text == update.text)
+    }
+
+    @Test func stablePartialWordsExcludeUnstableTail() throws {
+        let json = #"{"Transcript":{"Results":[{"Alternatives":[{"Transcript":"ramen in Austin","Items":[{"Content":"ramen","Stable":true},{"Content":"in","Stable":true},{"Content":"Austin","Stable":false}]}],"EndTime":3.2,"IsPartial":true,"ResultId":"r1","StartTime":1.0}]}}"#
+        let message = EventStreamMessage(headers: [(":event-type", .string("TranscriptEvent"))], payload: Data(json.utf8))
+        let updates = try TranscriptParser.updates(from: message)
+        #expect(updates.first?.text == "ramen in")
+        #expect(updates.first?.isPartial == true)
+        #expect(try TranscriptParser.finals(from: message).isEmpty)
+    }
+
+    @Test func finalReplacesPendingPartial() async {
+        let collector = SegmentCollector()
+        let batcher = TranscriptBatcher(delay: .seconds(60)) { await collector.append($0) }
+        var update = TranscriptSegment(callId: "c", segId: "one", text: "I ate ramen in Austin", startMs: 0, endMs: 1000, clientTs: 1)
+        update.isPartial = true
+        await batcher.append(update)
+        update.isPartial = false
+        update.text = "I ate ramen in Houston"
+        await batcher.append(update)
+        await batcher.flush()
+        let sent = await collector.values
+        #expect(sent.count == 1)
+        #expect(sent.first?.text == update.text)
     }
 }
 

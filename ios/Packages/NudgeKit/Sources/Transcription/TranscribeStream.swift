@@ -2,12 +2,13 @@
 import Foundation
 import os
 
-/// A final (non-partial) transcript result for this device's own microphone.
+/// A transcript result for this device's microphone. Partials contain only stable words.
 public struct FinalSegment: Sendable, Hashable {
     public var id: String
     public var text: String
     public var startMs: Int
     public var endMs: Int
+    public var isPartial: Bool = false
 
     public init(id: String, text: String, startMs: Int, endMs: Int) {
         self.id = id
@@ -17,7 +18,7 @@ public struct FinalSegment: Sendable, Hashable {
     }
 }
 
-/// Parses Transcribe `TranscriptEvent` JSON payloads into final segments.
+/// Parses Transcribe events into stable partial updates and complete final segments.
 public enum TranscriptParser {
     struct Payload: Decodable {
         struct Transcript: Decodable { let Results: [Result] }
@@ -28,19 +29,34 @@ public enum TranscriptParser {
             let IsPartial: Bool
             let Alternatives: [Alternative]
         }
-        struct Alternative: Decodable { let Transcript: String }
+        struct Alternative: Decodable {
+            let Transcript: String
+            let Items: [Item]?
+        }
+        struct Item: Decodable { let Content: String; let Stable: Bool? }
         let Transcript: Transcript
     }
 
     public static func finals(from message: EventStreamMessage) throws -> [FinalSegment] {
+        try updates(from: message).filter { !$0.isPartial }
+    }
+
+    /// Only use the stable prefix of a partial result; unstable trailing words can still change.
+    public static func updates(from message: EventStreamMessage) throws -> [FinalSegment] {
         if message.header(":message-type") == "exception" {
             throw TranscriptionError.service(String(decoding: message.payload, as: UTF8.self))
         }
         guard message.header(":event-type") == "TranscriptEvent" else { return [] }
         let p = try JSONDecoder().decode(Payload.self, from: message.payload)
         return p.Transcript.Results.compactMap { r in
-            guard !r.IsPartial, let text = r.Alternatives.first?.Transcript.trimmingCharacters(in: .whitespaces), !text.isEmpty else { return nil }
-            return FinalSegment(id: r.ResultId, text: text, startMs: Int(r.StartTime * 1000), endMs: Int(r.EndTime * 1000))
+            guard let alternative = r.Alternatives.first else { return nil }
+            let text = r.IsPartial
+                ? (alternative.Items ?? []).prefix(while: { $0.Stable == true }).map(\.Content).joined(separator: " ")
+                : alternative.Transcript.trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { return nil }
+            var segment = FinalSegment(id: r.ResultId, text: text, startMs: Int(r.StartTime * 1000), endMs: Int(r.EndTime * 1000))
+            segment.isPartial = r.IsPartial
+            return segment
         }
     }
 }
@@ -71,6 +87,8 @@ public actor TranscribeStreamClient {
             URLQueryItem(name: "language-code", value: "en-US"),
             URLQueryItem(name: "media-encoding", value: "pcm"),
             URLQueryItem(name: "sample-rate", value: String(sampleRate)),
+            URLQueryItem(name: "enable-partial-results-stabilization", value: "true"),
+            URLQueryItem(name: "partial-results-stability", value: "medium"),
         ]
         return c.url!
     }
@@ -110,7 +128,7 @@ public actor TranscribeStreamClient {
                 let message = try await task.receive()
                 guard case .data(let data) = message else { continue }
                 let decoded = try EventStreamMessage.decode(data)
-                for seg in try TranscriptParser.finals(from: decoded) { continuation?.yield(seg) }
+                for seg in try TranscriptParser.updates(from: decoded) { continuation?.yield(seg) }
             } catch {
                 log.error("receive: \(String(describing: error), privacy: .public)")
                 break

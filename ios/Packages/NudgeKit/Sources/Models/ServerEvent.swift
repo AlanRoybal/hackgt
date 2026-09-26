@@ -80,6 +80,7 @@ public struct TranscriptSegment: Codable, Sendable, Hashable {
     public var startMs: Int
     public var endMs: Int
     public var clientTs: Int64
+    public var isPartial: Bool? = nil
 
     public init(callId: String, segId: String, text: String, startMs: Int, endMs: Int, clientTs: Int64) {
         self.callId = callId

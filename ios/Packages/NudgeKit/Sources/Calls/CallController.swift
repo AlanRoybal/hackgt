@@ -245,7 +245,8 @@ public final class CallController {
     /// A `photo.suggestion` event from the backend (only the speaker receives these).
     public func receive(suggestion s: PhotoSuggestion) {
         guard s.callId == callId, photoMode != .off else { return }
-        if s.auto || photoMode == .auto {
+        // The server marks partial-transcript suggestions as manual even in auto mode.
+        if s.auto && photoMode == .auto {
             showSuggestion(s)
             autoShown = s
             suggestionTimer?.cancel()
@@ -303,8 +304,9 @@ public final class CallController {
             let batcher = makeTranscriptBatcher()
             transcriptTask = Task {
                 for await seg in stream {
-                    let t = TranscriptSegment(callId: callId, segId: seg.id, text: seg.text, startMs: seg.startMs, endMs: seg.endMs,
+                    var t = TranscriptSegment(callId: callId, segId: seg.id, text: seg.text, startMs: seg.startMs, endMs: seg.endMs,
                                               clientTs: Int64(Date().timeIntervalSince1970 * 1000))
+                    t.isPartial = seg.isPartial
                     await batcher.append(t)
                 }
                 await batcher.flush()
