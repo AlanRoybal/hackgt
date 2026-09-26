@@ -40,7 +40,7 @@ it('passes spoken subject to reranker and suggests partials without auto-sharing
   expect(rerankPhotos).toHaveBeenCalledWith(expect.stringContaining(input.text), expect.any(Array));
   expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen', auto: false }));
   expect(vi.mocked(put).mock.calls.some(([item]) => item.sk.startsWith('SEG#'))).toBe(false);
-  expect(del).toHaveBeenCalledWith(expect.anything(), 'owner = :owner', expect.anything());
+  expect(del).toHaveBeenCalledWith(expect.anything(), 'leaseToken = :owner', expect.anything());
 });
 
 it('does not substitute the skyline when the ramen photo was already suggested', async () => {

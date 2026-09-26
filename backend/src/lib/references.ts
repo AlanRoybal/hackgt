@@ -105,7 +105,7 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   const owner = newId('r');
   for (let attempt = 0; ; attempt++) {
     try {
-      await put({ ...lease, owner, expiresAt: Date.now() + 30_000, ttl: Math.floor(receivedAt / 1000) + DAY },
+      await put({ ...lease, leaseToken: owner, expiresAt: Date.now() + 30_000, ttl: Math.floor(receivedAt / 1000) + DAY },
         'attribute_not_exists(pk) OR expiresAt < :now', { ':now': Date.now() });
       break;
     } catch (e) {
@@ -239,7 +239,7 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   emitLatency(stages, { pipeline: 'reference' }, { callId: call.id, outcome: 'suggested', similarity: best.similarity });
   return { stored: true, detection, suggestionId, photoId, similarity: best.similarity };
   } finally {
-    try { await del(lease, 'owner = :owner', { ':owner': owner }); }
+    try { await del(lease, 'leaseToken = :owner', { ':owner': owner }); }
     catch (e) { if (!isConditionalFailure(e)) throw e; }
   }
 }
