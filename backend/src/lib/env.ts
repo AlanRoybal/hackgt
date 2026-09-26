@@ -21,5 +21,5 @@ export const env = {
   get vectorBucket() { return req('VECTOR_BUCKET'); },
   get vectorIndex() { return process.env.VECTOR_INDEX ?? 'photos'; },
   get currentTosVersion() { return process.env.TOS_VERSION ?? '2026-09-26'; },
-  get similarityThreshold() { return Number(process.env.SIMILARITY_THRESHOLD ?? '0.2'); },
+  get similarityThreshold() { return Number(process.env.SIMILARITY_THRESHOLD ?? '0.37'); },
 };

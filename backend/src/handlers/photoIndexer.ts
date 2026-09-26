@@ -36,7 +36,8 @@ export async function indexPhoto(s3Key: string) {
     const bytes = await getObjectBytes(s3Key);
     const caption = await captionImage(bytes);
     sw.lap('caption');
-    const embedding = await embedImage(bytes, [caption, item.place].filter(Boolean).join('. '));
+    // Image-only embedding: fusing the caption lowered top-1 from 1.00 to 0.95 in evals/retrieval (D-105).
+    const embedding = await embedImage(bytes);
     sw.lap('embed');
     const vk = vectorKey(userId, assetHash);
     await putPhotoVector(vk, embedding, {

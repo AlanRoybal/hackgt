@@ -34,7 +34,11 @@ export async function converse(opts: {
 
 /** Extracts the first JSON object from model text (tolerates code fences and chatter). */
 export function extractJson<T = any>(text: string): T | undefined {
-  const cleaned = text.replace(/```(?:json)?/g, '');
+  // Small models sometimes write yes/no for booleans.
+  const cleaned = text
+    .replace(/```(?:json)?/g, '')
+    .replace(/:\s*yes\b/gi, ': true')
+    .replace(/:\s*no\b/gi, ': false');
   const start = cleaned.indexOf('{');
   if (start < 0) return undefined;
   let depth = 0;

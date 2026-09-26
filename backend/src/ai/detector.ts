@@ -27,12 +27,14 @@ Answer NO when the last line is:
 - a question asking FRIEND about FRIEND's things
 - too vague to search ("that thing", "stuff") unless earlier lines make it concrete
 
-When YES, write "query": a short visual search phrase describing what the photo would show (use earlier lines to resolve "it"/"that"), e.g. "golden retriever puppy on a couch", "homemade lasagna", "sunset hike at a mountain lake".
-"dateHint": ISO dates {"from","to"} only if SPEAKER gives a time ("last weekend", "yesterday", "on the 12th"); resolve against TODAY. Otherwise omit.
-"placeHint": a place name only if one is said. Otherwise omit.
-"confidence": 0 to 1.
+When it is a reference, write "query": a short visual search phrase (3–8 words) describing what SPEAKER's photo would show, built only from words in the transcript (use earlier lines to resolve "it"/"that"). Do not invent details that weren't said.
+"dateHint": ISO dates {"from","to"} only if SPEAKER gives a time ("last weekend", "yesterday", "on the 12th"); resolve against TODAY. Otherwise omit it.
+"placeHint": a place name only if one is said. Otherwise omit it.
+"confidence": a number from 0 to 1.
 
-Reply with JSON only: {"isReference": boolean, "query": string, "dateHint": {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}, "placeHint": string, "confidence": number}`;
+Reply with one JSON object only, using the literal values true or false for isReference:
+{"isReference": true, "query": "...", "dateHint": {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}, "placeHint": "...", "confidence": 0.8}
+or {"isReference": false, "query": "", "confidence": 0.9}`;
 
 export function formatTranscript(segments: Segment[], speakerId: string): string {
   return segments.map((s) => `${s.userId === speakerId ? 'SPEAKER' : 'FRIEND'}: ${s.text.trim()}`).join('\n');

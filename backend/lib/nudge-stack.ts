@@ -208,7 +208,7 @@ export class NudgeStack extends Stack {
       SUMMARIZE_QUEUE_URL: summarizeQueue.queueUrl,
       VECTOR_BUCKET: vectorBucketName,
       VECTOR_INDEX: 'photos',
-      SIMILARITY_THRESHOLD: '0.2',
+      SIMILARITY_THRESHOLD: '0.37',
       TOS_VERSION: '2026-09-26',
       NODE_OPTIONS: '--enable-source-maps',
     };

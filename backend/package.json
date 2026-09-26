@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "test": "vitest run test",
-    "integ": "vitest run integ --no-file-parallelism",
+    "test": "vitest run --dir test",
+    "integ": "vitest run --dir integ --no-file-parallelism",
     "synth": "cdk synth -c stage=dev",
     "deploy:dev": "cdk deploy -c stage=dev --require-approval never --outputs-file cdk-outputs.dev.json",
     "destroy:dev": "cdk destroy -c stage=dev --force"
