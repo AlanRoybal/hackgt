@@ -26,10 +26,7 @@ struct FriendProfileView: View {
                         NudgeButton("Call now", systemImage: "video.fill", kind: .accept, isLoading: calling) {
                             Task { calling = true; await app.callNow(friend); calling = false }
                         }
-                        NudgeButton("Message", systemImage: "bubble.left.fill", kind: .secondary) {
-                            app.openThreadId = friend.id
-                            app.selectedTab = .messages
-                        }
+                        NudgeButton("Message", systemImage: "bubble.left.fill", kind: .secondary) { app.openThread(friend.id) }
                     }
                     memoriesSection(friend)
                     historySection
@@ -60,7 +57,7 @@ struct FriendProfileView: View {
 
     func header(_ f: Friend) -> some View {
         VStack(spacing: Space.s) {
-            AvatarView(user: f.user, name: f.name, size: 96, ring: f.freeNow)
+            AvatarView(user: f.user, name: f.name, size: AvatarSize.hero, ring: f.freeNow)
             VStack(spacing: Space.xxs) {
                 Button {
                     nicknameDraft = f.nickname ?? ""
@@ -117,13 +114,13 @@ struct FriendProfileView: View {
                                         Task { await app.memory.deleteSummary(s.callId, friendId: f.id) }
                                     }
                                 } label: {
-                                    Image(systemName: "ellipsis").foregroundStyle(Palette.inkTertiary).frame(width: 32, height: 24)
+                                    Image(systemName: "ellipsis").foregroundStyle(Palette.inkTertiary).frame(width: 44, height: 32).contentShape(Rectangle())
                                 }
                                 .accessibilityLabel("Summary options")
                             }
                             Text(s.summary).font(.subheadline).foregroundStyle(Palette.ink)
                         }
-                        if s.id != memories.summaries.last?.id { Rectangle().fill(Palette.divider).frame(height: 1) }
+                        if s.id != memories.summaries.last?.id { RowDivider(inset: 0) }
                     }
                     Text("Deleting a memory removes it for both of you.").font(.caption).foregroundStyle(Palette.inkTertiary)
                 }
@@ -155,18 +152,10 @@ struct FriendProfileView: View {
 
     func dangerZone(_ f: Friend) -> some View {
         CardList {
-            Button { confirmRemove = true } label: {
-                Text("Remove friend").frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, Space.m).frame(minHeight: 48)
+            DestructiveRow("Remove friend") { confirmRemove = true }
             RowDivider()
-            Button { confirmBlock = true } label: {
-                Text("Block").frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, Space.m).frame(minHeight: 48)
+            DestructiveRow("Block") { confirmBlock = true }
         }
-        .font(.body)
-        .foregroundStyle(Palette.roseStrong)
     }
 }
 

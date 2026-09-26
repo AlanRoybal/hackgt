@@ -41,6 +41,8 @@ final class AppModel {
     var openThreadId: String?
     var pendingAddHandle: String?
     var selectedTab: Tab = .friends
+    /// Bumped to send every tab back to its root (stacks popped, sheets closed). See `returnHomeIfAway()`.
+    private(set) var homeResetCount = 0
     var socketStatus: EventSocket.Status = .disconnected
     var incoming: IncomingCall?
     private(set) var onboardingComplete: Bool
@@ -49,6 +51,9 @@ final class AppModel {
     private var eventLoop: Task<Void, Never>?
     private var statusLoop: Task<Void, Never>?
     private var started = false
+    private var backgroundedAt: Date?
+    /// When a notification tap or link last chose where the app should land.
+    private var lastRoutedAt: Date = .distantPast
     private let log = Logger(subsystem: "app.nudge", category: "app")
 
     enum Tab: Hashable { case friends, messages, settings }
@@ -144,6 +149,40 @@ final class AppModel {
         await nudges.refreshActive()
     }
 
+    // MARK: Returning home
+
+    /// Leaving for longer than this lands you back on Friends. Shorter hops (copying a code, a quick reply in
+    /// another app) keep your place.
+    static let returnHomeAfter: TimeInterval = 30
+
+    func didEnterBackground() { backgroundedAt = Date() }
+
+    func returnHomeIfAway(now: Date = Date()) {
+        guard let since = backgroundedAt else { return }
+        backgroundedAt = nil
+        guard now.timeIntervalSince(since) >= Self.returnHomeAfter else { return }
+        // A notification tap or link that brought the app back decides where it lands instead.
+        guard now.timeIntervalSince(lastRoutedAt) > 2 else { return }
+        returnHome()
+    }
+
+    /// Friends tab, every stack at its root, no sheets. Calls, the waiting room and pending follow-ups stay up.
+    func returnHome() {
+        selectedTab = .friends
+        openThreadId = nil
+        homeResetCount += 1
+    }
+
+    /// Opens a conversation from outside the Messages tab (notification tap, friend profile).
+    func openThread(_ friendId: String) {
+        lastRoutedAt = Date()
+        selectedTab = .messages
+        openThreadId = friendId
+    }
+
+    /// The thread the user is actually looking at, if any (a thread left open on a background tab doesn't count).
+    var visibleThreadId: String? { selectedTab == .messages ? openThreadId : nil }
+
     func signOut() {
         Task { await socket.disconnect() }
         eventLoop?.cancel()
@@ -154,6 +193,7 @@ final class AppModel {
 
     func completeOnboarding() {
         onboardingComplete = true
+        selectedTab = .friends
         UserDefaults.standard.set(true, forKey: "onboardingComplete")
     }
 
@@ -185,7 +225,7 @@ final class AppModel {
 
     func route(_ event: ServerEvent) {
         nudges.apply(event)
-        messages.apply(event, openThread: openThreadId)
+        messages.apply(event, openThread: visibleThreadId)
         Task { await friends.apply(event) }
         switch event {
         case .photoSuggestion(let s): call.receive(suggestion: s)
@@ -245,6 +285,7 @@ final class AppModel {
 
     func open(url: URL) {
         if let handle = AddFriendLink.handle(from: url) {
+            lastRoutedAt = Date()
             pendingAddHandle = handle
             selectedTab = .friends
         }

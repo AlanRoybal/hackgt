@@ -31,7 +31,7 @@ public enum NudgeButtonSize: Sendable {
 
     var height: CGFloat {
         switch self {
-        case .large: 54
+        case .large: 50
         case .medium: 44
         case .small: 34
         }
@@ -60,21 +60,23 @@ public struct NudgeButtonStyle: ButtonStyle {
     }
 
     public func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: size == .small ? Radius.chip + 2 : Radius.input + 2, style: .continuous)
+        // Figma "Button": full-radius capsule, 20-pt side padding; pressed darkens the fill with an ink overlay,
+        // disabled drops to 40%.
         return configuration.label
             .font(size.font)
             .foregroundStyle(kind.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.horizontal, size == .small ? Space.s : Space.l)
+            .padding(.horizontal, size == .small ? Space.s : Space.margin)
             .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: size.height)
             .background {
-                shape.fill(kind.fill.opacity(configuration.isPressed ? 0.75 : 1))
+                Capsule().fill(kind.fill)
+                    .overlay(Capsule().fill(Palette.ink.opacity(configuration.isPressed ? 0.08 : 0)))
                     .animation(.easeInOut(duration: Motion.Durations.tint), value: configuration.isPressed)
             }
-            .contentShape(RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+            .contentShape(Capsule())
             .pressFeedback(configuration.isPressed)
-            .opacity(isEnabled ? 1 : 0.45)
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 
@@ -138,26 +140,28 @@ public struct NudgeButton: View {
     }
 }
 
-/// Round 56-pt in-call control.
+/// Figma "Round call control": 56 pt in-call, 72 pt for incoming Accept / Decline.
 public struct CallControlButton: View {
-    public enum Role: Sendable { case normal, active, end }
+    public enum Role: Sendable { case normal, active, end, accept }
     let systemImage: String
     let label: String
     let role: Role
+    let size: CGFloat
     let action: () -> Void
 
-    public init(systemImage: String, label: String, role: Role = .normal, action: @escaping () -> Void) {
+    public init(systemImage: String, label: String, role: Role = .normal, size: CGFloat = 56, action: @escaping () -> Void) {
         self.systemImage = systemImage
         self.label = label
         self.role = role
+        self.size = size
         self.action = action
     }
 
     public var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .medium))
-                .frame(width: 56, height: 56)
+                .font(.system(size: size > 56 ? 28 : 22, weight: .medium))
+                .frame(width: size, height: size)
         }
         .buttonStyle(RoundCallStyle(role: role))
         .accessibilityLabel(label)
@@ -168,15 +172,18 @@ struct RoundCallStyle: ButtonStyle {
     let role: CallControlButton.Role
 
     func makeBody(configuration: Configuration) -> some View {
+        // Fixed colors in both modes: these always sit on video. Pressed adds a 12% black overlay.
         let (fill, ink): (Color, Color) = switch role {
-        case .normal: (Color.white.opacity(0.16), Palette.callInk)
-        case .active: (Color(uiColor: UIColor(hex: 0xF2F1F6)), Color(uiColor: UIColor(hex: 0x1F2330)))
-        case .end: (Color(uiColor: UIColor(hex: 0xFADADF)), Color(uiColor: UIColor(hex: 0xB13647)))
+        case .normal: (Color(uiColor: UIColor(hex: 0x1F2330, alpha: 0.6)), .white)
+        case .active: (.white, Color(uiColor: UIColor(hex: 0x1F2330)))
+        case .end: (Color(uiColor: UIColor(hex: 0xB23346)), .white)
+        case .accept: (Color(uiColor: UIColor(hex: 0x237558)), .white)
         }
         return configuration.label
             .foregroundStyle(ink)
             .background {
-                Circle().fill(fill.opacity(configuration.isPressed ? 0.7 : 1))
+                Circle().fill(fill)
+                    .overlay(Circle().fill(Color.black.opacity(configuration.isPressed ? 0.12 : 0)))
                     .animation(.easeInOut(duration: Motion.Durations.tint), value: configuration.isPressed)
             }
             .pressFeedback(configuration.isPressed, scale: 0.92) // Figma M18a: in-call controls press deeper

@@ -74,11 +74,7 @@ struct PhoneView: View {
             VStack(spacing: Space.xs) {
                 NudgeButton(sent ? "Verify" : "Send code", isLoading: working) { Task { sent ? await verify() : await send() } }
                     .disabled(sent ? code.count != 6 : hasher.e164(phone) == nil)
-                if !fromSettings {
-                    Button("Skip for now", action: onDone)
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.inkSecondary)
-                        .frame(minHeight: 44)
-                }
+                if !fromSettings { SubtleButton("Skip for now", action: onDone) }
             }
         }
         .padding(.horizontal, Space.margin)
@@ -246,9 +242,7 @@ struct PermissionPrimerView: View {
                     }
                 }
                 .motionLayer(beat.springUp(at: 0.8).tappable)
-                Button("Not now", action: onDone)
-                    .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.inkSecondary).frame(minHeight: 44)
-                    .buttonStyle(PressFeedbackButtonStyle())
+                SubtleButton("Not now", action: onDone)
                     .motionLayer(beat.springUp(at: 0.88).tappable)
             }
         }
@@ -282,14 +276,18 @@ struct AddFirstFriendsView: View {
                         UserResultsList(results: app.friends.searchResults)
                     } else {
                         if !app.friends.contactMatches.isEmpty {
-                            SectionHeader("From your contacts")
-                            UserResultsList(results: app.friends.contactMatches)
+                            VStack(alignment: .leading, spacing: Space.s) {
+                                SectionHeader("From your contacts")
+                                UserResultsList(results: app.friends.contactMatches)
+                            }
                         }
                         ShareLinkCard()
                     }
                 }
                 .padding(.horizontal, Space.margin)
+                .padding(.bottom, Space.l)
             }
+            .scrollDismissesKeyboard(.interactively)
             NudgeButton("Done", kind: .primary) { onDone() }
                 .padding(.horizontal, Space.margin)
                 .padding(.vertical, Space.s)
@@ -308,7 +306,7 @@ struct UserResultsList: View {
             ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
                 AdaptiveStack(spacing: Space.s) {
                     HStack(spacing: Space.s) {
-                        AvatarView(user: r.publicUser, size: 40)
+                        AvatarView(user: r.publicUser, size: AvatarSize.large)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.displayName).font(Typography.friendName).foregroundStyle(Palette.ink)
                             Text("@\(r.handle)").font(.subheadline).foregroundStyle(Palette.inkSecondary)
@@ -318,8 +316,8 @@ struct UserResultsList: View {
                     RelationButton(result: r).fixedSize()
                 }
                 .padding(.horizontal, Space.m)
-                .padding(.vertical, Space.s)
-                if i < results.count - 1 { RowDivider() }
+                .padding(.vertical, 10)
+                if i < results.count - 1 { RowDivider(inset: RowMetrics.friendDividerInset) }
             }
         }
     }
@@ -351,16 +349,16 @@ struct ShareLinkCard: View {
     var body: some View {
         let handle = app.session.me?.user.handle ?? "you"
         HStack(spacing: Space.m) {
-            Image(systemName: "link").font(.headline).foregroundStyle(Palette.lavenderStrong)
-                .frame(width: 44, height: 44).background(Palette.lavender, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
+            IconTile("link", tint: .lavender, size: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Invite with your link").font(.headline).foregroundStyle(Palette.ink)
                 Text("nudge://add/\(handle)").font(.subheadline).foregroundStyle(Palette.inkSecondary).lineLimit(1)
             }
             Spacer()
             SwiftUI.ShareLink(item: ShareLinkText.text(handle)) {
-                Text("Share").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.lavenderStrong)
+                Text("Share")
             }
+            .buttonStyle(NudgeButtonStyle(.primary, size: .small, fullWidth: false))
         }
         .nudgeCard()
     }

@@ -12,7 +12,7 @@ struct ConversationsView: View {
             ScrollView {
                 VStack(spacing: Space.l) {
                     if !app.messages.hasLoaded {
-                        CardList { ForEach(0..<4, id: \.self) { i in SkeletonRow(index: i).padding(.horizontal, Space.m) } }
+                        CardList { ForEach(0..<4, id: \.self) { i in SkeletonRow(index: i, kind: .message).padding(.horizontal, Space.m) } }
                     } else if app.messages.conversations.isEmpty {
                         EmptyStateView(.messages, title: "No messages yet",
                                        message: "When a nudge doesn't work out, notes like \"I'll call you soon\" land here.")
@@ -22,7 +22,7 @@ struct ConversationsView: View {
                             let list = app.messages.conversations
                             ForEach(Array(list.enumerated()), id: \.element.id) { i, c in
                                 NavigationLink(value: c.id) { ConversationRow(conversation: c) }.buttonStyle(.plain)
-                                if i < list.count - 1 { RowDivider().padding(.leading, 56) }
+                                if i < list.count - 1 { RowDivider(inset: RowMetrics.avatarDividerInset) }
                             }
                         }
                     }
@@ -44,7 +44,7 @@ struct ConversationRow: View {
 
     var body: some View {
         HStack(spacing: Space.s) {
-            AvatarView(user: conversation.friend, name: conversation.name, size: 44)
+            AvatarView(user: conversation.friend, name: conversation.name, size: AvatarSize.row)
             VStack(alignment: .leading, spacing: 2) {
                 AdaptiveStack(spacing: 2) {
                     Text(conversation.name).font(Typography.friendName).foregroundStyle(Palette.ink)
@@ -59,7 +59,7 @@ struct ConversationRow: View {
                     Spacer()
                     if conversation.unread > 0 {
                         Text("\(conversation.unread)").font(.caption2.weight(.bold)).foregroundStyle(Palette.lavenderStrong)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .padding(.horizontal, Space.xs).padding(.vertical, 2)
                             .background(Palette.lavender, in: Capsule())
                     }
                 }
@@ -71,8 +71,7 @@ struct ConversationRow: View {
     }
 
     var preview: String {
-        guard let m = conversation.lastMessage else { return "Say hi" }
-        return m.kind == .system ? m.body : m.body
+        conversation.lastMessage?.body ?? "Say hi"
     }
 }
 
@@ -123,8 +122,8 @@ struct ThreadView: View {
                 TextField("Message", text: $draft, axis: .vertical)
                     .lineLimit(1...4)
                     .focused($focused)
-                    .padding(.horizontal, Space.m).padding(.vertical, Space.s)
-                    .background(Palette.surfaceAlt, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .padding(.horizontal, Space.m).padding(.vertical, 10)
+                    .background(Palette.surfaceAlt, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                 Button {
                     let text = draft
                     draft = ""
@@ -133,7 +132,9 @@ struct ThreadView: View {
                     Image(systemName: "arrow.up").font(.headline).foregroundStyle(Palette.lavenderStrong)
                         .frame(width: 40, height: 40).background(Palette.lavender, in: Circle())
                 }
+                .buttonStyle(PressFeedbackButtonStyle())
                 .disabled(draft.nonEmptyString == nil)
+                .opacity(draft.nonEmptyString == nil ? 0.4 : 1)
                 .accessibilityLabel("Send")
             }
             .padding(.horizontal, Space.margin)
@@ -174,23 +175,17 @@ struct MessageBubble: View {
     var body: some View {
         switch message.kind {
         case .system:
-            Text(message.body)
-                .font(.caption.weight(.medium)).foregroundStyle(Palette.inkSecondary)
-                .padding(.horizontal, Space.s).padding(.vertical, 6)
-                .background(Palette.surfaceAlt, in: Capsule())
+            SystemEventPill(message.body, systemImage: message.body.localizedCaseInsensitiveContains("call") ? "video.fill" : "bell.fill")
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Space.xxs)
         case .user, .autoFollowup:
             VStack(alignment: isMine ? .trailing : .leading, spacing: 3) {
                 Text(message.body)
                     .font(.body)
-                    .foregroundStyle(isMine ? Palette.lavenderStrong : Palette.ink)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(isMine ? Palette.lavender : Palette.surface,
-                                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .messageBubble(isMine: isMine)
                 if message.kind == .autoFollowup {
                     Label("Sent automatically", systemImage: "sparkles")
-                        .font(.caption2).foregroundStyle(Palette.inkTertiary)
+                        .font(.caption).foregroundStyle(Palette.inkSecondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
