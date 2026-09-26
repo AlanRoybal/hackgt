@@ -74,7 +74,7 @@ export class NudgeStack extends Stack {
       distanceMetric: 'cosine',
       metadataConfiguration: { nonFilterableMetadataKeys: ['caption'] },
     });
-    vectorIndex.addDependency(vectorBucket);
+    vectorIndex.addResourceDependency(vectorBucket);
     vectorIndex.applyRemovalPolicy(removalPolicy);
 
     const dlq = new sqs.Queue(this, 'DeadLetters', { retentionPeriod: Duration.days(4), removalPolicy });
@@ -369,7 +369,7 @@ export class NudgeStack extends Stack {
     new CfnOutput(this, 'UserPoolClientId', { value: client.userPoolClientId });
     new CfnOutput(this, 'IdentityPoolId', { value: identityPool.ref });
     new CfnOutput(this, 'MediaBucket', { value: bucket.bucketName });
-    new CfnOutput(this, 'VectorBucket', { value: vectorBucketName });
+    new CfnOutput(this, 'VectorBucketName', { value: vectorBucketName });
     new CfnOutput(this, 'TableName', { value: table.tableName });
   }
 }
