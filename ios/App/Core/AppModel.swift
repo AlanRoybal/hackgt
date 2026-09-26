@@ -208,8 +208,9 @@ final class AppModel {
 
     func callNow(_ friend: Friend) async {
         do {
-            let n = try await api.callNow(friendId: friend.id)
-            await nudges.accept(n)
+            // The server creates the nudge with the caller already accepted, so go straight to the waiting room.
+            // Responding again would 409 (already_responded) and leave the caller with no ringing UI.
+            await nudges.enterWaitingRoom(try await api.callNow(friendId: friend.id))
         } catch {
             nudges.error = error.localizedDescription
         }

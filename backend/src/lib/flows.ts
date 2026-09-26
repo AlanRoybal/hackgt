@@ -339,6 +339,10 @@ export async function createDirectNudge(callerId: string, friendId: string): Pro
     gsi1sk: `NUDGE#${createdAt}`,
   };
   await put(n);
+  // The caller is looking at the waiting room: mark their sockets now so a fast accept can't beat the client's
+  // own `waiting` message and ring them over VoIP instead of sending call.matched.
+  const callerConns = await connectionsFor(callerId);
+  await Promise.all(callerConns.map((c) => update(K.conn(c.connectionId), { waitingNudgeId: id }, { condition: 'attribute_exists(pk)' }).catch(() => {})));
   const busyUntil = new Date(now + (NUDGE_TTL_S + 60) * 1000).toISOString();
   await Promise.all([callerId, friendId].map((u) => update(K.user(u), { activeNudgeId: id, busyUntil })));
   await pushToUser(
