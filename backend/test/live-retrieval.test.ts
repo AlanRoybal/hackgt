@@ -57,8 +57,45 @@ it('does not guess when the reranker fails', async () => {
 });
 
 it('skips competing partial searches', async () => {
-  vi.mocked(put).mockRejectedValueOnce({ name: 'ConditionalCheckFailedException' });
+  vi.mocked(put).mockImplementation(async (item) => {
+    if (item.sk.startsWith('RETRIEVAL#')) throw { name: 'ConditionalCheckFailedException' };
+  });
   await handleTranscript('u', input);
   expect(detectReference).not.toHaveBeenCalled();
   expect(del).not.toHaveBeenCalled();
+});
+
+const friendSeg = { sk: 'SEG#9999999999999#f#x', userId: 'f', text: 'I ate ramen in Chinatown in Houston last weekend' };
+
+it('does not search the camera roll when the line is the friend\'s voice picked up by the mic', async () => {
+  vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
+  vi.mocked(query).mockResolvedValue([friendSeg] as any);
+  await handleTranscript('u', { ...input, isPartial: false });
+  expect(detectReference).not.toHaveBeenCalled();
+  expect(sendToUser).not.toHaveBeenCalled();
+});
+
+it('catches echo from the friend\'s latest partial before their final lands', async () => {
+  vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
+  vi.mocked(get).mockImplementation(async (key: any) =>
+    key.sk === 'LIVE#f' ? { userId: 'f', text: friendSeg.text, at: Date.now() } : { status: 'indexed', s3Key: 'photo' });
+  await handleTranscript('u', input);
+  expect(detectReference).not.toHaveBeenCalled();
+});
+
+it('drops the suggestion when the friend\'s matching line lands during the search', async () => {
+  vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
+  vi.mocked(get).mockImplementation(async (key: any) => (key.sk === 'LIVE#f' ? undefined : { status: 'indexed', s3Key: 'photo' }));
+  vi.mocked(query).mockResolvedValueOnce([]).mockResolvedValue([friendSeg] as any);
+  await handleTranscript('u', { ...input, isPartial: false });
+  expect(detectReference).toHaveBeenCalled();
+  expect(sendToUser).not.toHaveBeenCalled();
+});
+
+it('still suggests when the friend said something unrelated', async () => {
+  vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
+  vi.mocked(get).mockImplementation(async (key: any) => (key.sk === 'LIVE#f' ? undefined : { status: 'indexed', s3Key: 'photo' }));
+  vi.mocked(query).mockResolvedValue([{ ...friendSeg, text: 'what did you do this weekend' }] as any);
+  await handleTranscript('u', { ...input, isPartial: false });
+  expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen' }));
 });
