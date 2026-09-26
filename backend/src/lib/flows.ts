@@ -4,7 +4,7 @@ import { followUpMessage } from '../ai/followup.js';
 import { stepDown } from '../engine/frequency.js';
 import { isTerminal, transition, type Effect, type NudgeEvent } from '../engine/state.js';
 import type { NudgeResponse, NudgeState } from '../engine/types.js';
-import { createMeeting, deleteMeeting } from './chime.js';
+import { createMeeting, deleteMeeting, startTranscription } from './chime.js';
 import { get, isConditionalFailure, put, queryPrefix, update } from './db.js';
 import { env } from './env.js';
 import { HttpError, notFound } from './http.js';
@@ -206,6 +206,7 @@ async function createCallForNudge(n: NudgeItem, actorId?: string): Promise<Nudge
   const callId = newId('c');
   const users = await loadUsers(n.participants);
   const { meeting, attendees } = await createMeeting(callId, n.participants);
+  await startTranscription(meeting.MeetingId!);
   const now = new Date().toISOString();
   const memoryAllowed = n.participants.every((u) => users.get(u)?.settings.memoryEnabled !== false);
   const call: CallItem = {

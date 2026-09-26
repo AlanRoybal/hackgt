@@ -157,7 +157,7 @@ export class NudgeStack extends Stack {
     role.addToPolicy(new iam.PolicyStatement({ actions: ['rekognition:DetectModerationLabels', 'rekognition:DetectText'], resources: ['*'] }));
     role.addToPolicy(
       new iam.PolicyStatement({
-        actions: ['chime:CreateMeeting', 'chime:CreateAttendee', 'chime:DeleteMeeting', 'chime:GetMeeting'],
+        actions: ['chime:CreateMeeting', 'chime:CreateAttendee', 'chime:DeleteMeeting', 'chime:GetMeeting', 'chime:StartMeetingTranscription', 'chime:StopMeetingTranscription'],
         resources: ['*'],
       }),
     );
@@ -210,6 +210,7 @@ export class NudgeStack extends Stack {
       VECTOR_INDEX: 'photos',
       SIMILARITY_THRESHOLD: '0.37',
       TOS_VERSION: '2026-09-26',
+      MEETING_TRANSCRIPTION: 'on',
       NODE_OPTIONS: '--enable-source-maps',
     };
 

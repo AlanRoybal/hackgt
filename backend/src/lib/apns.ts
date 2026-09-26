@@ -34,7 +34,7 @@ export function apnsConfig(): Promise<ApnsConfig | null> {
 
 let jwtCache: { token: string; at: number } | undefined;
 
-async function providerToken(cfg: ApnsConfig): Promise<string> {
+export async function providerToken(cfg: ApnsConfig): Promise<string> {
   if (jwtCache && Date.now() - jwtCache.at < 50 * 60_000) return jwtCache.token;
   const key = await importPKCS8(cfg.p8, 'ES256');
   const token = await new SignJWT({})

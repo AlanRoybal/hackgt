@@ -140,6 +140,24 @@ describe('accounts', () => {
     expect((await a.req('POST', '/friend-requests', { userId: b.id })).relation).toBe('requested');
   });
 
+  it('WebSocket: bad tokens are rejected at $connect; ping → pong', async () => {
+    const u = await makeUser('ws');
+    users.push(u);
+    const { WS } = await import('./client.js');
+    const WebSocket = (await import('ws')).default;
+    const status = await new Promise<number>((resolve) => {
+      const bad = new WebSocket(`${WS}?token=nope`);
+      bad.once('unexpected-response', (_q, res) => resolve(res.statusCode ?? 0));
+      bad.once('open', () => resolve(101));
+    });
+    expect(status).toBe(401);
+    const { openSocket } = await import('./client.js');
+    const s = await openSocket(u);
+    s.send({ action: 'ping' });
+    expect(await s.waitFor((e) => e.type === 'pong', 10_000)).toEqual({ type: 'pong' });
+    s.close();
+  });
+
   it('ACC-12: delete account removes items, claims, S3 objects and the Cognito user', async () => {
     const a = await makeUser('del');
     const b = await makeUser('delf');

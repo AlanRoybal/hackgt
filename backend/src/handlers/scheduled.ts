@@ -15,8 +15,8 @@ export const delay = async (event: SQSEvent) => {
       if (msg.kind === 'precheck') await precheck(msg.nudgeId);
       else if (msg.kind === 'expire') await expireNudge(msg.nudgeId);
     } catch (e) {
-      // Invalid-state errors mean someone already responded; nothing to retry.
-      if ((e as any)?.status === 409) continue;
+      // 409: someone already responded. 404: the nudge was deleted with an account. Nothing to retry.
+      if ((e as any)?.status === 409 || (e as any)?.status === 404) continue;
       throw e;
     }
   }

@@ -48,5 +48,13 @@ export async function summarize(callId: string, now = new Date()) {
 }
 
 export const handler = async (event: SQSEvent) => {
-  for (const r of event.Records) await summarize(JSON.parse(r.body).callId);
+  for (const r of event.Records) {
+    try {
+      await summarize(JSON.parse(r.body).callId);
+    } catch (e) {
+      // The call is gone (e.g. an account was deleted): nothing to summarize, don't retry.
+      if ((e as any)?.status === 404) continue;
+      throw e;
+    }
+  }
 };
