@@ -17,6 +17,7 @@ export const K = {
   call: (id: string) => ({ pk: `CALL#${id}`, sk: 'META' }),
   suggestion: (callId: string, suggestionId: string) => ({ pk: `CALL#${callId}`, sk: `SUGG#${suggestionId}` }),
   share: (callId: string, shareId: string) => ({ pk: `CALL#${callId}`, sk: `SHARE#${shareId}` }),
+  callLive: (callId: string, userId: string) => ({ pk: `CALL#${callId}`, sk: `LIVE#${userId}` }),
   photo: (id: string, assetHash: string) => ({ pk: `USER#${id}`, sk: `PHOTO#${assetHash}` }),
   topic: (pk: string, id: string) => ({ pk: `PAIR#${pk}`, sk: `TOPIC#${id}` }),
   summary: (pk: string, callId: string) => ({ pk: `PAIR#${pk}`, sk: `SUMMARY#${callId}` }),

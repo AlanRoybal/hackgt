@@ -4,7 +4,7 @@ import { formatTranscript, retrievalQueries } from '../src/ai/detector.js';
 import { parseRerank } from '../src/ai/rerank.js';
 import { pairKey, segSk } from '../src/lib/keys.js';
 import { validateSettingsPatch } from '../src/lib/settings.js';
-import { dateRange, fusePhotoHits, pickHit } from '../src/lib/references.js';
+import { dateRange, fusePhotoHits, isLikelyEcho, pickHit } from '../src/lib/references.js';
 import { cutoffSec } from '../src/handlers/photoSweep.js';
 import { payloads } from '../src/lib/push.js';
 
@@ -86,6 +86,18 @@ describe('reference helpers', () => {
     ]];
     const caption = [[{ key: 'u#b', similarity: 0.42, metadata: { caption: 'lantern cafe', place: 'Atlanta cafe' } }]];
     expect(fusePhotoHits(image, caption, 'Atlanta').map((x) => x.key)).toEqual(['u#b', 'u#a']);
+  });
+  it('treats a line that repeats the friend as echo, even with transcription slips', () => {
+    const friend = ['I made this huge bowl of ramen last night with a soft egg'];
+    expect(isLikelyEcho('I made this huge bowl of ramen last night', friend)).toBe(true);
+    expect(isLikelyEcho('made this huge bowl of rum in last night with soft egg', friend)).toBe(true);
+  });
+  it('keeps real replies and the speaker\'s own stories', () => {
+    const friend = ['I made this huge bowl of ramen last night with a soft egg'];
+    expect(isLikelyEcho('oh nice I had tacos at that new place downtown', friend)).toBe(false);
+    expect(isLikelyEcho('ramen sounds amazing, we went hiking at Stone Mountain', friend)).toBe(false);
+    expect(isLikelyEcho('I made this huge bowl of ramen', [])).toBe(false);
+    expect(isLikelyEcho('ramen ramen', friend)).toBe(false);
   });
 });
 

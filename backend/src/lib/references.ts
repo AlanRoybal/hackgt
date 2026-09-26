@@ -18,6 +18,9 @@ const DAY = 86_400;
 const RETRIEVAL_TOP_K = 10;
 const RERANK_TOP_K = 8;
 const MIN_RERANK_CONFIDENCE = 0.55;
+/** How far back the friend's speech can be and still come through this speaker's mic as echo. */
+const ECHO_WINDOW_MS = 15_000;
+const ECHO_MIN_OVERLAP = 0.7;
 
 export interface TranscriptInput {
   callId: string;
@@ -76,6 +79,42 @@ export function fusePhotoHits(
   return [...byKey.values()].sort((a, b) => Number(b.metadata.fusionScore) - Number(a.metadata.fusionScore));
 }
 
+const words = (text: string) => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
+
+/**
+ * On speakerphone the friend's voice reaches this user's mic, so their transcript can repeat what
+ * the friend just said. A line is echo when most of its words were in the friend's recent speech.
+ */
+export function isLikelyEcho(text: string, friendTexts: string[]): boolean {
+  const mine = words(text);
+  if (mine.length < 3) return false;
+  const theirs = new Set(friendTexts.flatMap(words));
+  if (!theirs.size) return false;
+  return mine.filter((w) => theirs.has(w)).length / mine.length >= ECHO_MIN_OVERLAP;
+}
+
+const segTimeMs = (sk: string) => Number(sk.split('#')[1]);
+
+/** The friend's finals and latest partial received since `sinceMs`. */
+async function friendSpeech(callId: string, friendId: string | undefined, sinceMs: number): Promise<string[]> {
+  if (!friendId) return [];
+  const [segs, live] = await Promise.all([
+    query({
+      KeyConditionExpression: 'pk = :pk AND sk BETWEEN :lo AND :hi',
+      ExpressionAttributeValues: { ':pk': `CALL#${callId}`, ':lo': segSk(sinceMs, '', ''), ':hi': segSk(Date.now() + 1, '~', '~') },
+      ConsistentRead: true,
+    }),
+    query({
+      KeyConditionExpression: 'pk = :pk AND sk = :sk',
+      ExpressionAttributeValues: { ':pk': K.callLive(callId, friendId).pk, ':sk': K.callLive(callId, friendId).sk },
+      ConsistentRead: true,
+    }),
+  ]);
+  return [...segs, ...live.filter((l) => Number(l.at) >= sinceMs)]
+    .filter((s) => s.userId === friendId)
+    .map((s) => String(s.text ?? ''));
+}
+
 export async function handleTranscript(userId: string, input: TranscriptInput) {
   const sw = stopwatch();
   const receivedAt = Date.now();
@@ -95,7 +134,10 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     clientTs: input.clientTs,
     ttl: Math.floor(receivedAt / 1000) + DAY,
   });
+  // Finals can trail the words by seconds; the latest partial lets the friend's echo check see them sooner.
+  else await put({ ...K.callLive(call.id, userId), userId, text, at: receivedAt, ttl: Math.floor(receivedAt / 1000) + DAY });
   sw.lap('store');
+  const friendId = call.participants.find((p: string) => p !== userId);
 
   const user = await getUser(userId);
   if (user.settings.photoMode === 'off' || text.split(/\s+/).length < 3) return { stored: true };
@@ -126,6 +168,14 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     },
   });
   sw.lap('context');
+  const echoSince = receivedAt - ECHO_WINDOW_MS;
+  const recentFriend = segs.filter((s) => s.userId === friendId && segTimeMs(s.sk) >= echoSince).map((s) => String(s.text));
+  const live = friendId ? await get(K.callLive(call.id, friendId)) : undefined;
+  if (live && Number(live.at) >= echoSince) recentFriend.push(String(live.text));
+  if (isLikelyEcho(text, recentFriend)) {
+    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'echo' });
+    return { stored: !input.isPartial, outcome: 'echo' };
+  }
   // The segment just received is always the line being judged, even if the friend's segment landed after it.
   const window = [...segs.filter((s) => s.sk !== currentSk).map((s) => ({ userId: s.userId, text: s.text })), { userId, text }];
   const detection = await detectReference(window, userId);
@@ -197,6 +247,11 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     if (finals.some((s) => s.userId === userId && s.segId === input.segId)) {
       return { stored: false, outcome: 'superseded' };
     }
+  }
+  // The friend's own words for this line may have landed while we searched.
+  if (isLikelyEcho(text, await friendSpeech(call.id, friendId, echoSince))) {
+    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'echo' });
+    return { stored: !input.isPartial, outcome: 'echo' };
   }
   // Repeated references must not promote an unrelated runner-up after the right photo was shown.
   if (suggested.has(best.key) || Date.now() - receivedAt > 12_000 || (await getCall(call.id)).endedAt) {
