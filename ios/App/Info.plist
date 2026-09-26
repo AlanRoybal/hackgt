@@ -40,6 +40,11 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_nudge-tap._tcp</string>
+		<string>_nudge-tap._udp</string>
+	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Nudge checks when you're busy so it can tell when you and a friend are both free. Only busy times are shared, never event names.</string>
 	<key>NSCameraUsageDescription</key>
@@ -48,10 +53,14 @@
 	<string>Nudge checks which of your contacts use Nudge. Numbers are scrambled on your phone before anything is sent.</string>
 	<key>NSFocusStatusUsageDescription</key>
 	<string>Nudge won't nudge you while a Focus is on.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Nudge looks for friends' phones nearby so you can tap phones to add each other.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Your microphone is used for calls, and to find photos you mention.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Nudge won't nudge you while you're driving.</string>
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>Nudge measures how close a friend's phone is so holding your phones together adds each other.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Nudge analyzes photos from the last 30 days so the ones you mention on a call can appear. Only photos you choose to show are sent to your friend.</string>
 	<key>NudgeAPIBaseURL</key>

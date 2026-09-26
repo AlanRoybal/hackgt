@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "NudgeKit", targets: [
             "DesignSystem", "Models", "Networking", "Auth", "Friends", "Availability", "Nudges",
             "Calls", "Transcription", "PhotoIndex", "PhotoShare", "Messages", "Memory", "Settings",
-            "BackgroundWork",
+            "BackgroundWork", "Nearby",
         ]),
         .library(name: "NudgeExtensionKit", targets: ["DesignSystem", "Models"]),
     ],
@@ -37,9 +37,10 @@ let package = Package(
         .target(name: "Memory", dependencies: ["Networking", "Models"]),
         .target(name: "Settings", dependencies: ["Networking", "Models"]),
         .target(name: "BackgroundWork", dependencies: ["Availability", "PhotoIndex", "Networking"]),
+        .target(name: "Nearby", dependencies: ["Networking", "Models"]),
         .testTarget(name: "NudgeKitTests", dependencies: [
             "Models", "Networking", "Friends", "Availability", "Nudges", "PhotoShare", "Transcription",
-            "Calls", "PhotoIndex", "DesignSystem",
+            "Calls", "PhotoIndex", "DesignSystem", "Nearby",
         ]),
     ]
 )

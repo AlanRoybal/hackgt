@@ -315,6 +315,7 @@ export class NudgeStack extends Stack {
       ['GET', '/friends/{userId}/memories'], ['DELETE', '/friends/{userId}/topics/{topicId}'],
       ['POST', '/friends/{userId}/topics/{topicId}/dismiss'], ['DELETE', '/friends/{userId}/summaries/{callId}'],
       ['DELETE', '/memories'], ['GET', '/friends/{userId}/calls'], ['POST', '/friends/{userId}/call'],
+      ['POST', '/tap/token'], ['POST', '/tap'],
     ]) route(m, p, friendsFn);
 
     for (const [m, p] of [

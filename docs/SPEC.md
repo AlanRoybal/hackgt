@@ -48,6 +48,8 @@ Verification tags used below: **[U]** unit test · **[I]** backend integration t
 
 **ACC-12 Delete account.** As a user, I can delete my account; all my items, S3 objects, vectors, friendships, pair data I'm part of, and my Cognito user are removed. [I asserts zero remaining items/objects]
 
+**ACC-13 Tap phones to add.** As a user, with Nudge open on both phones, I can hold the top of my phone to a friend's and we become friends, like NameDrop: a glow builds at the top edge as the phones get close, blooms when they touch, and a card shows "You and Sam are friends". It needs both phones to tap (one phone replaying a token it overheard can't add anyone). If we're already friends, nothing happens. Nearby phones learn nothing about me but an opaque id until we're friends. [U detection, tap rules] [I] [D two phones]
+
 ### 1.2 Availability (AV)
 
 **AV-1 Free/busy sync.** As a user, only my busy times (never titles) are shared.
@@ -179,6 +181,8 @@ Honesty rule: a story is only "Done" when every tag on it has passed. Stories wi
 | Availability | `USER#<id>` | `AVAIL` | busyBlocks[{start,end}] (ISO, merged), syncedAt, source (`apple`), focus?{isFocused, at}, driving?{isDriving, at} |
 | Friend request | `USER#<to>` | `FREQ#<from>` | from, to, createdAt, gsi1pk=`FREQOUT#<from>`, gsi1sk=`<to>` |
 | Friendship | `USER#<a>` | `FRIEND#<b>` | nickname?, since, lastCallAt?, lastNudgeAt?, gsi1pk=`FRIENDSHIPS`, gsi1sk=`<pairKey>#<a>` |
+| Tap token | `TAP#<token>` | `META` | userId, expiresAt (10 min), ttl |
+| Tap | `USER#<from>` | `TAP#<to>` | at, matched?, ttl (30 s window) |
 | Block | `USER#<a>` | `BLOCK#<b>` | createdAt |
 | Nudge | `NUDGE#<id>` | `META` | id, pairKey, participants[2], kind (`auto`\|`direct`), initiatorId?, window{start,end}, minutes, copyByUser{userId→{title,body}}, topicId?, state, responses{userId→`accepted`\|`skipped`\|`less`\|`expired`}, sentAt?, expiresAt?, callId?, createdAt, ttl (+30 d), gsi1pk=`PAIR#<pairKey>`, gsi1sk=`NUDGE#<createdAt>` |
 | Call | `CALL#<id>` | `META` | id, nudgeId, pairKey, participants, chimeMeetingId, meeting (JSON), attendees{userId→attendee JSON}, startedAt, endedAt?, memoryAllowed, gsi1pk=`PAIR#<pairKey>`, gsi1sk=`CALL#<startedAt>` |
@@ -319,6 +323,8 @@ AuthTokens   { accessToken, idToken, refreshToken?, expiresIn, userId, isNew }
 | DELETE `/memories` | — | 204 (all pairs I'm in) |
 | GET `/friends/{userId}/calls` | — | `{ calls: {callId, startedAt, durationSec}[] }` |
 | POST `/friends/{userId}/call` | — | `Nudge` (direct, me pre-accepted) |
+| POST `/tap/token` | — | `{ token, expiresAt }` (this phone's token to hand to the other phone) |
+| POST `/tap` | `{ token }` (the other phone's) | `{ status: "pending" }` until the other phone taps back, then `{ status: "friends", user }`; `{ status: "already_friends", user }` changes nothing. 404 `tap_expired`, 404 `user_not_found` (blocked), 400 `own_token` |
 
 **Messages**
 

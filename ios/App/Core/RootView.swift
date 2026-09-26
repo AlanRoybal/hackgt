@@ -100,6 +100,13 @@ struct AppIconMark: View {
 
 struct MainView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Tap to add listens while the app is open and nothing full-screen (a call, the waiting room) is up.
+    private var tapListening: Bool {
+        !app.isPreview && scenePhase == .active && FlowContainer.current(app) == nil
+    }
 
     var body: some View {
         @Bindable var app = app
@@ -117,8 +124,12 @@ struct MainView: View {
         }
         .overlay(alignment: .top) { NudgeBannerOverlay() }
         .overlay(alignment: .bottom) { ToastOverlay() }
+        .tapToFriendLean(app.tap.phase, reduceMotion: reduceMotion)
+        .overlay { TapToFriendOverlay() }
         .sheet(item: followUpBinding) { FollowUpApprovalSheet(draft: $0) }
         .fullScreenCover(isPresented: flowPresented) { FlowContainer() }
+        .onChange(of: tapListening, initial: true) { _, on in on ? app.tap.start() : app.tap.stop() }
+        .onDisappear { app.tap.stop() }
     }
 
     /// Swiping the sheet away leaves the draft unsent; the notification stays so it can still be approved later.

@@ -65,6 +65,9 @@ targets:
         NSMicrophoneUsageDescription: "Your microphone is used for calls, and to find photos you mention."
         NSMotionUsageDescription: "Nudge won't nudge you while you're driving."
         NSFocusStatusUsageDescription: "Nudge won't nudge you while a Focus is on."
+        NSLocalNetworkUsageDescription: "Nudge looks for friends' phones nearby so you can tap phones to add each other."
+        NSBonjourServices: [_nudge-tap._tcp, _nudge-tap._udp]
+        NSNearbyInteractionUsageDescription: "Nudge measures how close a friend's phone is so holding your phones together adds each other."
         NudgeAPIBaseURL: $(NUDGE_API_BASE_URL)
         NudgeWebSocketURL: $(NUDGE_WS_URL)
         NudgeAppGroup: group.$(NUDGE_BUNDLE_ID)

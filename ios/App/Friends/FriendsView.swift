@@ -199,6 +199,7 @@ struct AddFriendsView: View {
                         }
                     case .invite:
                         InviteCard()
+                        TapHintCard()
                     }
                 }
                 .padding(.horizontal, Space.margin)

@@ -1,7 +1,9 @@
-// Friends, requests, blocks, contacts, memories, call history, "Call now".
+// Friends, requests, blocks, contacts, tap to add, memories, call history, "Call now".
+import { randomBytes } from 'node:crypto';
 import { checkHandle, normalizeHandle } from '../engine/handles.js';
 import { freeStatus } from '../engine/overlap.js';
 import { isStale } from '../engine/suppression.js';
+import { isFreshTap, TAP_INTENT_WINDOW_MS, TAP_TOKEN_TTL_MS, tapStep, type TapIntent } from '../engine/tap.js';
 import { batchDelete, batchGet, del, get, put, queryGsi, queryPartition, queryPrefix, update } from '../lib/db.js';
 import { createDirectNudge, nudgeDTO, topicDTO } from '../lib/flows.js';
 import { bad, forbidden, notFound, router } from '../lib/http.js';
@@ -99,6 +101,8 @@ async function topicDTOs(pk: string) {
   const topics = await queryPrefix(`PAIR#${pk}`, 'TOPIC#');
   return topics.map(topicDTO);
 }
+
+const ttlAfter = (ms: number) => Math.floor((Date.now() + ms) / 1000) + 60;
 
 export const handler = router({
   'GET /users/search': async ({ userId, query }) => {
@@ -266,6 +270,51 @@ export const handler = router({
         durationSec: c.endedAt ? Math.round((Date.parse(c.endedAt) - Date.parse(c.startedAt)) / 1000) : 0,
       })),
     };
+  },
+
+  // Tap phones (ACC-13). The token is what this phone hands to the other one over the local link.
+  'POST /tap/token': async ({ userId }) => {
+    const token = randomBytes(18).toString('base64url');
+    const expiresAt = Date.now() + TAP_TOKEN_TTL_MS;
+    await put({ ...K.tapToken(token), userId, expiresAt, ttl: ttlAfter(TAP_TOKEN_TTL_MS) });
+    return { token, expiresAt: new Date(expiresAt).toISOString() };
+  },
+
+  // Redeems the other phone's token. Idempotent: the phone that tapped first gets "pending" and calls again.
+  'POST /tap': async ({ userId, body }) => {
+    if (typeof body.token !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(body.token)) throw bad('invalid_token');
+    const now = Date.now();
+    const claim = await get(K.tapToken(body.token));
+    if (!claim || claim.expiresAt < now) throw notFound('tap_expired');
+    const peerId = claim.userId as string;
+    if (peerId === userId) throw bad('own_token');
+    const [fs, blocked, mine] = await Promise.all([
+      getFriendship(userId, peerId),
+      isBlockedEitherWay(userId, peerId),
+      get<TapIntent>(K.tap(userId, peerId), { consistent: true }),
+    ]);
+    // Who they are is only shared once they're friends: a token overheard nearby doesn't reveal its owner.
+    const user = async () => publicUser(await getUser(peerId));
+    switch (tapStep({ blocked, friends: !!fs, mine, now })) {
+      case 'reject': throw notFound('user_not_found');
+      case 'added': return { status: 'friends', user: await user() };
+      case 'already_friends': return { status: 'already_friends', user: await user() };
+      case 'record': break;
+    }
+    // Keep the first tap's time so retries can't stretch the window.
+    const at = isFreshTap(mine, now) ? mine!.at : now;
+    await put({ ...K.tap(userId, peerId), at, ttl: ttlAfter(TAP_INTENT_WINDOW_MS) });
+    const theirs = await get<TapIntent>(K.tap(peerId, userId), { consistent: true });
+    if (!isFreshTap(theirs, now)) return { status: 'pending' };
+    // Mark both taps before the friendship exists, so a retry never sees friends without its match.
+    await Promise.all([
+      update(K.tap(userId, peerId), { matched: true }),
+      update(K.tap(peerId, userId), { matched: true }),
+    ]);
+    await makeFriends(userId, peerId);
+    const me = await getUser(userId);
+    await sendToUser(peerId, { type: 'friend.accepted', user: await publicUser(me) });
+    return { status: 'friends', user: await user() };
   },
 
   'POST /friends/{userId}/call': async ({ userId, params }) => {

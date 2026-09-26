@@ -134,6 +134,13 @@ public struct NudgeAPI: Sendable {
 
     public func removeFriend(_ userId: String) async throws { try await client.send(.delete, "/friends/\(userId)") }
 
+    public func tapToken() async throws -> TapToken { try await client.request(.post, "/tap/token") }
+
+    struct TapBody: Encodable, Sendable { let token: String }
+    public func tap(token: String) async throws -> TapResult {
+        try await client.request(.post, "/tap", body: TapBody(token: token))
+    }
+
     struct UsersBody: Decodable, Sendable { let users: [PublicUser] }
     public func blocked() async throws -> [PublicUser] {
         let r: UsersBody = try await client.request(.get, "/blocks")
