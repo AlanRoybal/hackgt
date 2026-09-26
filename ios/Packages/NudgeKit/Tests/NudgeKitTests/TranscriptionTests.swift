@@ -166,3 +166,37 @@ struct SigV4Tests {
         #expect(SigV4.uriEncode("a/b~c") == "a%2Fb~c")
     }
 }
+
+@Suite("Mute privacy")
+struct MutePrivacyTests {
+    @Test func mutedCaptureRemainsSilentAfterUnmute() {
+        let gate = SpeechMuteGate()
+        let voice = Data([1, 2, 3, 4])
+        #expect(gate.filter(voice) == voice)
+        gate.setMuted(true)
+        let capturedWhileMuted = gate.filter(voice)
+        #expect(capturedWhileMuted == Data(count: voice.count))
+        gate.setMuted(false)
+        #expect(gate.filter(capturedWhileMuted) == Data(count: voice.count))
+        #expect(gate.filter(voice) == voice)
+    }
+
+    @Test func queuedAudioIsSilencedWhenMuteStartsBeforeSend() {
+        let gate = SpeechMuteGate()
+        let capturedBeforeMute = gate.filter(Data([1, 2, 3, 4]))
+        gate.setMuted(true)
+        #expect(gate.filter(capturedBeforeMute) == Data(count: 4))
+    }
+
+    @Test func discardDropsPendingSpeechRatherThanFlushingIt() async throws {
+        let collector = SegmentCollector()
+        let batcher = TranscriptBatcher(delay: .milliseconds(20)) { await collector.append($0) }
+        var segment = TranscriptSegment(callId: "c", segId: "muted", text: "this should never leave the phone", startMs: 0, endMs: 1000, clientTs: 1)
+        segment.isPartial = true
+        await batcher.append(segment)
+        await batcher.discard()
+        try await Task.sleep(for: .milliseconds(50))
+        await batcher.finish()
+        #expect(await collector.values.isEmpty)
+    }
+}

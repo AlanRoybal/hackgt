@@ -45,5 +45,12 @@ public actor TranscriptBatcher {
         await send(segment)
     }
 
+    public func discard() {
+        timer?.cancel()
+        timer = nil
+        pending = nil
+        lastSent.removeAll()
+    }
+
     public func finish() async { await flush() }
 }

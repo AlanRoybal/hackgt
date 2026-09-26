@@ -49,6 +49,7 @@ public final class CallController {
     private var localTileId: Int?
     private var remoteTileId: Int?
     private var transcriber: TranscribeStreamClient?
+    private var transcriptEpoch = 0
     private var mic: MicCapture?
     private var transcriptTask: Task<Void, Never>?
     private var transcriptBatcher: TranscriptBatcher?
@@ -122,6 +123,7 @@ public final class CallController {
                 try box.value.start(audioVideoConfiguration: configBox.value)
             }.value
             log.notice("join: Chime start returned")
+            guard applySessionMute() else { return }
             routeAudioToSpeaker()
             try? session.audioVideo.startLocalVideo()
             session.audioVideo.startRemoteVideo()
@@ -184,13 +186,43 @@ public final class CallController {
 
     // MARK: Controls
 
-    public func toggleMute() {
-        guard let av = session?.audioVideo else { isMuted.toggle(); return }
-        isMuted = isMuted ? !av.realtimeLocalUnmute() : av.realtimeLocalMute()
-    }
+    public func toggleMute() { setMuted(!isMuted) }
 
     public func setMuted(_ muted: Bool) {
-        if muted != isMuted { toggleMute() }
+        guard muted != isMuted else { return }
+        if let av = session?.audioVideo {
+            let success = muted ? av.realtimeLocalMute() : av.realtimeLocalUnmute()
+            guard success else {
+                error = muted ? "Couldn't mute the call. Please end it and try again." : "Couldn't unmute. Your microphone is still muted."
+                log.error("Call audio mute change failed")
+                return
+            }
+        }
+        isMuted = muted
+        transcriber?.muteGate.setMuted(muted)
+        transcriptEpoch += 1
+        let oldBatcher = transcriptBatcher
+        transcriptBatcher = nil
+        Task { await oldBatcher?.discard() }
+        if muted {
+            suggestion = nil
+            suggestionTimer?.cancel()
+        }
+    }
+
+    /// A new/reconnected Chime audio unit must match the button, even when no new tap occurs.
+    @discardableResult
+    private func applySessionMute() -> Bool {
+        guard let av = session?.audioVideo else { return true }
+        let success = isMuted ? av.realtimeLocalMute() : av.realtimeLocalUnmute()
+        guard success else {
+            // Don't keep a live audio session behind an unverified mute indicator.
+            error = "Couldn't restore microphone state. The call was stopped."
+            av.stop()
+            Task { await self.remoteEnded() }
+            return false
+        }
+        return true
     }
 
     public func toggleCamera() {
@@ -244,7 +276,7 @@ public final class CallController {
 
     /// A `photo.suggestion` event from the backend (only the speaker receives these).
     public func receive(suggestion s: PhotoSuggestion) {
-        guard s.callId == callId, photoMode != .off else { return }
+        guard s.callId == callId, photoMode != .off, !isMuted else { return }
         // The server marks partial-transcript suggestions as manual even in auto mode.
         if s.auto && photoMode == .auto {
             showSuggestion(s)
@@ -296,20 +328,27 @@ public final class CallController {
                 return try await cognito.credentials(idToken: token)
             }
             let stream = try await client.start()
+            guard self.callId == callId, isActive else { await client.stop(); return }
+            let gate = client.muteGate
+            gate.setMuted(isMuted)
             let mic = MicCapture()
-            try mic.start { chunk in Task { await client.send(pcm: chunk) } }
+            try mic.start { chunk in
+                // Filter at capture too: a queued chunk recorded while muted must stay silent after unmute.
+                let pcm = gate.filter(chunk)
+                Task { await client.send(pcm: pcm) }
+            }
             self.mic = mic
             self.transcriber = client
             ownTranscribeRunning = true
-            let batcher = makeTranscriptBatcher()
             transcriptTask = Task {
                 for await seg in stream {
+                    guard !isMuted, self.callId == callId, isActive else { continue }
                     var t = TranscriptSegment(callId: callId, segId: seg.id, text: seg.text, startMs: seg.startMs, endMs: seg.endMs,
                                               clientTs: Int64(Date().timeIntervalSince1970 * 1000))
                     t.isPartial = seg.isPartial
-                    await batcher.append(t)
+                    await makeTranscriptBatcher().append(t)
                 }
-                await batcher.flush()
+                await transcriptBatcher?.flush()
                 await MainActor.run { self.ownTranscribeRunning = false }
             }
         } catch {
@@ -333,7 +372,7 @@ public final class CallController {
     /// Fallback (D-201): if the meeting has Chime live transcription enabled and our own stream isn't
     /// running, forward our own final segments from Chime's events.
     fileprivate func receiveChimeTranscript(text: String, attendeeId: String, startMs: Int64, endMs: Int64, resultId: String) {
-        guard !ownTranscribeRunning, let callId, attendeeId != peerAttendeeId else { return }
+        guard !isMuted, isActive, !ownTranscribeRunning, let callId, attendeeId != peerAttendeeId else { return }
         let t = TranscriptSegment(callId: callId, segId: resultId, text: text, startMs: Int(startMs), endMs: Int(endMs),
                                   clientTs: Int64(Date().timeIntervalSince1970 * 1000))
         let batcher = makeTranscriptBatcher()
@@ -342,17 +381,23 @@ public final class CallController {
 
     private func makeTranscriptBatcher() -> TranscriptBatcher {
         if let transcriptBatcher { return transcriptBatcher }
-        let socket = socket
-        let batcher = TranscriptBatcher { segment in
-            try? await socket?.send(.transcript(segment))
+        let epoch = transcriptEpoch
+        let batcher = TranscriptBatcher { [weak self] segment in
+            await self?.sendTranscript(segment, epoch: epoch)
         }
         transcriptBatcher = batcher
         return batcher
     }
 
+    private func sendTranscript(_ segment: TranscriptSegment, epoch: Int) async {
+        guard !isMuted, isActive, transcriptEpoch == epoch, callId == segment.callId else { return }
+        try? await socket?.send(.transcript(segment))
+    }
+
     // MARK: Chime callbacks
 
     fileprivate func audioStarted(reconnecting: Bool) {
+        guard applySessionMute() else { return }
         phase = .connected
         if startedAt == nil { startedAt = Date() }
         // Chime recreates its audio unit after a network reconnect, which resets this route.
