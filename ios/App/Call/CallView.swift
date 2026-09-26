@@ -11,6 +11,10 @@ struct CallView: View {
     @State private var lastInteraction = Date()
     @State private var corner: SnapGeometry.Corner = .topTrailing
     @State private var drag: CGSize = .zero
+    @State private var promptHeight: CGFloat = 0
+    /// Drag on my own shared photo. While it's non-zero the remote video sits under the photo (and the mini window
+    /// goes back to my camera), so swiping the photo away uncovers the normal call.
+    @State private var photoSwipe: CGSize = .zero
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
@@ -22,33 +26,35 @@ struct CallView: View {
     }
 
     var call: CallController { app.call }
+    var display: DisplayState { call.photos?.display ?? .selfView }
     static let miniSize = CGSize(width: 112, height: 160)
 
     var body: some View {
         GeometryReader { geo in
+            // The mini window's snap corners keep clear of the header, the controls and any prompt stacked above them.
+            let prompt = hasPrompt ? promptHeight + Space.m : 0
             let insets = EdgeInsetsLike(top: geo.safeAreaInsets.top + 56, leading: Space.m,
-                                        bottom: geo.safeAreaInsets.bottom + (controlsVisible ? 112 : Space.m), trailing: Space.m)
+                                        bottom: geo.safeAreaInsets.bottom + (controlsVisible || hasPrompt ? 112 : Space.m) + prompt, trailing: Space.m)
             let full = CGSize(width: geo.size.width, height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
             ZStack(alignment: .topLeading) {
-                RemoteStage(call: call, isPreview: app.isPreview)
+                stage
                     .ignoresSafeArea()
                     .onTapGesture { showControls() }
 
                 topBar.padding(.top, geo.safeAreaInsets.top + Space.xs).padding(.horizontal, Space.m)
 
                 let center = SnapGeometry.center(of: corner, container: full, window: Self.miniSize, insets: insets)
-                MiniWindow(call: call, isPreview: app.isPreview)
+                MiniWindow(call: call, isPreview: app.isPreview, showsRemote: display.photo != nil && photoSwipe == .zero)
                     .frame(width: Self.miniSize.width, height: Self.miniSize.height)
                     .position(x: center.x + drag.width, y: center.y + drag.height)
                     .gesture(dragGesture(full: full, insets: insets))
                     .animation(Motion.resolved(Motion.snap, reduceMotion: reduceMotion), value: corner)
+                    .animation(Motion.resolved(Motion.snap, reduceMotion: reduceMotion), value: hasPrompt)
                     .ignoresSafeArea()
 
-                suggestionLayer(center: center, full: full)
-                    .ignoresSafeArea()
-
-                VStack {
+                VStack(spacing: Space.m) {
                     Spacer()
+                    promptLayer
                     controls
                         .opacity(controlsVisible ? 1 : 0)
                         .offset(y: controlsVisible || reduceMotion ? 0 : 12)
@@ -69,12 +75,51 @@ struct CallView: View {
             // Never hide while VoiceOver is on: the controls would be unreachable.
             if !Task.isCancelled, call.suggestion == nil, !voiceOver { controlsVisible = false }
         }
+        .onChange(of: call.suggestion?.id) { _, id in if id != nil { showControls() } }
         .onChange(of: voiceOver) { _, on in if on { showControls() } }
         .sensoryFeedback(.impact(weight: .light), trigger: corner)
         .sensoryFeedback(.success, trigger: call.photos?.display.photo?.shareId)
     }
 
     // MARK: Pieces
+
+    /// Remote video full screen, until a photo is shared: then the photo takes the stage and the
+    /// remote video moves into the mini window. Both swap back when the share ends. My own photo can be
+    /// swiped away like a card, uncovering the remote video underneath.
+    var stage: some View {
+        let lifted = photoSwipe != .zero
+        return ZStack {
+            if display.photo == nil || lifted {
+                RemoteStage(call: call, isPreview: app.isPreview)
+                    .transition(.opacity)
+            }
+            if let p = display.photo {
+                SharedPhotoStage(photo: p, peerName: call.peerName, isMine: isMine)
+                    .overlay {
+                        SwipeStamp(text: "Stop showing", systemImage: "xmark", tint: Palette.roseStrong, progress: abs(photoSwipe.width) / 110)
+                            .scaleEffect(1.3)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: lifted ? 32 : 0, style: .continuous))
+                    .scaleEffect(lifted ? 0.9 : 1)
+                    .animation(Motion.resolved(Motion.snap, reduceMotion: reduceMotion), value: lifted)
+                    .tinderSwipe(offset: $photoSwipe, isEnabled: isMine) { _ in
+                        call.hideMine()
+                        // Cancelling swaps the display synchronously; if this photo is somehow still up, bring it back.
+                        if display.photo?.shareId == p.shareId {
+                            withAnimation(Motion.resolved(Motion.snap, reduceMotion: reduceMotion)) { photoSwipe = .zero }
+                        }
+                    }
+                    .transition(.opacity)
+                    .id(p.shareId)
+                    .accessibilityAction(named: "Stop showing") { if isMine { call.hideMine() } }
+            }
+        }
+        .animation(Motion.resolved(Motion.photoSwap, reduceMotion: reduceMotion), value: display)
+        .onChange(of: display.photo?.shareId) { photoSwipe = .zero }
+    }
+
+    var isMine: Bool { if case .mine = display { true } else { false } }
+    var hasPrompt: Bool { display.photo != nil || call.suggestion != nil || call.autoShown != nil }
 
     var topBar: some View {
         HStack(alignment: .top) {
@@ -119,27 +164,28 @@ struct CallView: View {
         .background(Palette.callScrim.opacity(0.72), in: Capsule())
     }
 
-    @ViewBuilder
-    func suggestionLayer(center: CGPoint, full: CGSize) -> some View {
-        let below = corner == .topLeading || corner == .topTrailing
-        let leading = corner == .topLeading || corner == .bottomLeading
-        let chipWidth = typeSize.isAccessibilitySize ? full.width - Space.m * 2 : min(320, full.width - Space.m * 2)
-        let offset: CGFloat = typeSize.isAccessibilitySize ? 110 : 46
-        let y = center.y + (below ? Self.miniSize.height / 2 + offset : -Self.miniSize.height / 2 - offset)
-        let x = leading ? Space.m + chipWidth / 2 : full.width - Space.m - chipWidth / 2
-        ZStack {
+    /// The shared photo's label, then the Ask-first suggestion (or the Automatic-mode Hide pill), anchored above the call controls.
+    var promptLayer: some View {
+        VStack(spacing: Space.s) {
+            // Automatic mode's Hide pill already says who it's showing to; don't repeat it.
+            if let p = display.photo, call.autoShown == nil, photoSwipe == .zero {
+                SharedPhotoLabel(photo: p, peerName: call.peerName, isMine: isMine) { call.hideMine() }
+                    .transition(.opacity)
+            }
             if let s = call.suggestion {
-                SuggestionChip(suggestion: s, isPreview: app.isPreview,
+                SuggestionCard(suggestion: s, peerName: call.peerName, isPreview: app.isPreview,
                                onShow: { call.showSuggestion(s) }, onDismiss: { call.dismissSuggestion(s) })
-                    .transition(.scale(scale: 0.9, anchor: below ? .top : .bottom).combined(with: .opacity))
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if let a = call.autoShown {
                 HidePill(name: call.peerName) { call.hideMine() }
                     .transition(.opacity)
                     .id(a.id)
             }
         }
-        .frame(width: chipWidth)
-        .position(x: x, y: y)
+        .frame(maxWidth: 500)
+        .padding(.horizontal, Space.m)
+        .animation(Motion.resolved(Motion.photoSwap, reduceMotion: reduceMotion), value: display.photo == nil)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { promptHeight = $0 }
         .animation(Motion.resolved(Motion.sheet, reduceMotion: reduceMotion), value: call.suggestion?.id)
         .animation(Motion.resolved(Motion.sheet, reduceMotion: reduceMotion), value: call.autoShown?.id)
     }
@@ -151,11 +197,6 @@ struct CallView: View {
                 let start = SnapGeometry.center(of: corner, container: full, window: Self.miniSize, insets: insets)
                 let release = CGPoint(x: start.x + v.translation.width, y: start.y + v.translation.height)
                 let velocity = CGVector(dx: v.velocity.width, dy: v.velocity.height)
-                let projected = CGPoint(x: release.x + SnapGeometry.project(velocity.dx), y: release.y + SnapGeometry.project(velocity.dy))
-                // Flinging my own photo off-screen ends it early (REF-9 swipe → cancel).
-                if case .mine = call.photos?.display, projected.x < -40 || projected.x > full.width + 40 {
-                    call.hideMine()
-                }
                 let target = SnapGeometry.target(release: release, velocity: velocity, container: full, window: Self.miniSize, insets: insets)
                 withAnimation(Motion.resolved(Motion.snap, reduceMotion: reduceMotion)) {
                     corner = target
@@ -170,10 +211,12 @@ struct CallView: View {
     }
 }
 
-/// Full-screen remote video, or a calm placeholder when the camera is off.
+/// Remote video, or a calm placeholder when the camera is off. Full screen, or compact in the mini window.
 struct RemoteStage: View {
     let call: CallController
     let isPreview: Bool
+    /// Shown inside the mini window while a photo has the stage.
+    var compact = false
 
     var body: some View {
         ZStack {
@@ -184,8 +227,8 @@ struct RemoteStage: View {
                 VideoSurface(view: call.remoteVideoView)
             } else if let peer = call.peer {
                 VStack(spacing: Space.m) {
-                    AvatarView(user: peer, name: call.peerName, size: 112)
-                    if call.phase == .connected || call.remoteCameraOff {
+                    AvatarView(user: peer, name: call.peerName, size: compact ? 56 : 112)
+                    if !compact, call.phase == .connected || call.remoteCameraOff {
                         Label("\(call.peerName)'s camera is off", systemImage: "video.slash.fill")
                             .font(.subheadline).foregroundStyle(Palette.callInk.opacity(0.7))
                     }
@@ -193,7 +236,7 @@ struct RemoteStage: View {
             }
             if call.phase == .connecting {
                 Color.black.opacity(0.25)
-                ProgressView().controlSize(.large).tint(Palette.callInk)
+                ProgressView().controlSize(compact ? .regular : .large).tint(Palette.callInk)
             }
         }
     }
