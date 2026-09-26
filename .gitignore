@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+cdk.out/
+*.p8
+.env
+.env.*
+ios/Nudge.xcodeproj/
+ios/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+tools/**/node_modules/
+evals/**/out/
