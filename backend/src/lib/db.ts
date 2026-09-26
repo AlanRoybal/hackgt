@@ -31,8 +31,8 @@ export async function put(item: Item, condition?: string, values?: Record<string
   );
 }
 
-export async function del(key: Key, condition?: string): Promise<void> {
-  await ddb.send(new DeleteCommand({ TableName: env.table, Key: key, ConditionExpression: condition }));
+export async function del(key: Key, condition?: string, values?: Record<string, unknown>): Promise<void> {
+  await ddb.send(new DeleteCommand({ TableName: env.table, Key: key, ConditionExpression: condition, ExpressionAttributeValues: values }));
 }
 
 /** Sets the given attributes (undefined values are removed). */

@@ -2,7 +2,7 @@
 import { detectReference, retrievalQueries } from '../ai/detector.js';
 import { embedText } from '../ai/embed.js';
 import { rerankPhotos } from '../ai/rerank.js';
-import { get, put, query, queryPrefix } from './db.js';
+import { get, put, query, queryPrefix, del, isConditionalFailure } from './db.js';
 import { env } from './env.js';
 import { getCall } from './flows.js';
 import { K, newId, segSk } from './keys.js';
@@ -26,6 +26,7 @@ export interface TranscriptInput {
   startMs?: number;
   endMs?: number;
   clientTs?: number;
+  isPartial?: boolean;
 }
 
 /** Converts a YYYY-MM-DD hint into an inclusive epoch-second range with a day of slack for time zones. */
@@ -83,10 +84,11 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   const text = String(input.text ?? '').trim().slice(0, 2000);
   if (!text) return { stored: false };
   const currentSk = segSk(receivedAt, userId, String(input.segId ?? newId('g')).slice(0, 64));
-  await put({
+  if (!input.isPartial) await put({
     pk: `CALL#${call.id}`,
     sk: currentSk,
     userId,
+    segId: input.segId,
     text,
     startMs: input.startMs,
     endMs: input.endMs,
@@ -97,6 +99,23 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
 
   const user = await getUser(userId);
   if (user.settings.photoMode === 'off' || text.split(/\s+/).length < 3) return { stored: true };
+
+  // Bound model fan-out across concurrent Lambda invocations. Finals still enter history above.
+  const lease = { pk: `CALL#${call.id}`, sk: `RETRIEVAL#${userId}` };
+  const owner = newId('r');
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await put({ ...lease, owner, expiresAt: Date.now() + 30_000, ttl: Math.floor(receivedAt / 1000) + DAY },
+        'attribute_not_exists(pk) OR expiresAt < :now', { ':now': Date.now() });
+      break;
+    } catch (e) {
+      if (!isConditionalFailure(e)) throw e;
+      if (input.isPartial || attempt >= 24) return { stored: !input.isPartial, outcome: 'busy' };
+      // A corrected final must get a turn even when the last partial is in flight.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  try {
 
   const segs = await query({
     KeyConditionExpression: 'pk = :pk AND sk BETWEEN :lo AND :hi',
@@ -117,23 +136,26 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   }
 
   const queries = retrievalQueries(detection);
-  const vectors = await Promise.all(queries.map((q) => embedText([q, detection.placeHint].filter(Boolean).join(', '))));
+  // Keep subject embeddings distinct from the location boost; repeating a city in
+  // every query can drown out the actual meal/object the speaker describes.
+  const vectors = await Promise.all(queries.map((q) => embedText(q)));
   sw.lap('embed');
   const range = dateRange(detection.dateHint);
   const search = async (opts: { fromSec?: number; toSec?: number }) => {
-    const imageGroups = await Promise.all(vectors.map((vec) => queryPhotos(userId, vec, { topK: RETRIEVAL_TOP_K, ...opts })));
-    // The caption index is introduced additively; unavailable/migrating indexes must not block call suggestions.
-    const captionGroups = await Promise.all(vectors.map((vec) => queryCaptionPhotos(userId, vec, { topK: RETRIEVAL_TOP_K, ...opts }).catch(() => [])));
+    const [imageGroups, captionGroups] = await Promise.all([
+      Promise.all(vectors.map((vec) => queryPhotos(userId, vec, { topK: RETRIEVAL_TOP_K, ...opts }))),
+      Promise.all(vectors.map((vec) => queryCaptionPhotos(userId, vec, { topK: RETRIEVAL_TOP_K, ...opts }).catch(() => []))),
+    ]);
     return fusePhotoHits(imageGroups, captionGroups, detection.placeHint);
   };
   let hits = await search(range);
   const suggested = new Set(
     (await queryPrefix(`CALL#${call.id}`, 'SUGG#')).filter((s) => s.userId === userId).map((s) => `${userId}#${s.photoId}`),
   );
-  let best = pickHit(hits, env.similarityThreshold, suggested);
+  let best = pickHit(hits, env.similarityThreshold, new Set());
   if (!best && (range.fromSec || range.toSec)) {
     hits = await search({});
-    best = pickHit(hits, env.similarityThreshold, suggested);
+    best = pickHit(hits, env.similarityThreshold, new Set());
   }
   sw.lap('search');
   if (!best) {
@@ -141,16 +163,17 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     return { stored: true, detection };
   }
   const finalists = hits
-    .filter((hit) => hit.similarity >= env.similarityThreshold && !suggested.has(hit.key))
+    .filter((hit) => hit.similarity >= env.similarityThreshold)
     .slice(0, RERANK_TOP_K);
   let rerankConfidence: number | undefined;
   try {
-    const decision = await rerankPhotos(detection.query, finalists.map((hit) => ({
+    const decision = await rerankPhotos(JSON.stringify({ spokenReference: text, query: detection.query, placeHint: detection.placeHint }), finalists.map((hit) => ({
       key: hit.key,
       caption: typeof hit.metadata.caption === 'string' ? hit.metadata.caption : undefined,
       place: typeof hit.metadata.place === 'string' ? hit.metadata.place : undefined,
       takenAt: Number(hit.metadata.takenAt) || undefined,
     })));
+    if (!decision) return { stored: !input.isPartial, outcome: 'rerank_invalid' };
     if (decision) {
       rerankConfidence = decision.confidence;
       if (!decision.key || decision.confidence < MIN_RERANK_CONFIDENCE) {
@@ -160,16 +183,31 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
       best = finalists.find((hit) => hit.key === decision.key) ?? best;
     }
   } catch (e) {
-    // Preserve the fast vector-only path if Bedrock is briefly unavailable.
     console.warn('photo rerank failed', (e as Error).name);
+    return { stored: !input.isPartial, outcome: 'rerank_unavailable' };
   }
   sw.lap('rerank');
+  if (input.isPartial) {
+    const finals = await query({
+      KeyConditionExpression: 'pk = :pk AND sk BETWEEN :lo AND :hi',
+      ExpressionAttributeValues: { ':pk': `CALL#${call.id}`, ':lo': segSk(receivedAt, '', ''), ':hi': segSk(Date.now() + 1, '~', '~') },
+      ConsistentRead: true,
+    });
+    // A final may correct a name or append a negation. Let that final's queued search decide.
+    if (finals.some((s) => s.userId === userId && s.segId === input.segId)) {
+      return { stored: false, outcome: 'superseded' };
+    }
+  }
+  // Repeated references must not promote an unrelated runner-up after the right photo was shown.
+  if (suggested.has(best.key) || Date.now() - receivedAt > 12_000 || (await getCall(call.id)).endedAt) {
+    return { stored: !input.isPartial, outcome: 'suppressed' };
+  }
   const photoId = best.key.split('#')[1];
   const photo = await get(K.photo(userId, photoId));
   if (!photo || photo.status !== 'indexed') return { stored: true, detection };
   const suggestionId = newId('g');
   const thumbUrl = await presignGet(photo.s3Key, 300);
-  const auto = user.settings.photoMode === 'auto';
+  const auto = user.settings.photoMode === 'auto' && !input.isPartial;
   await sendToUser(userId, {
     type: 'photo.suggestion',
     callId: call.id,
@@ -200,4 +238,8 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   });
   emitLatency(stages, { pipeline: 'reference' }, { callId: call.id, outcome: 'suggested', similarity: best.similarity });
   return { stored: true, detection, suggestionId, photoId, similarity: best.similarity };
+  } finally {
+    try { await del(lease, 'owner = :owner', { ':owner': owner }); }
+    catch (e) { if (!isConditionalFailure(e)) throw e; }
+  }
 }

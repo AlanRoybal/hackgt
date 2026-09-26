@@ -15,6 +15,9 @@ export interface RerankDecision {
 
 const SYSTEM = `You select the one personal photo that best matches a recent spoken reference during a call.
 Use only the supplied candidate metadata. Choose none if no candidate clearly matches; never guess.
+The concrete subject and activity are essential. A shared city, date, or venue alone is NOT a match.
+A reference to eating ramen in Houston requires evidence of ramen or a matching meal, not a Houston skyline or street.
+If metadata cannot establish the subject, choose none. Preserve explicit details and negations in the spoken reference.
 Return JSON only: {"choice": 1, "confidence": 0.0} where choice is a candidate number, or {"choice": null, "confidence": 0.0}.`;
 
 export function parseRerank(text: string, candidates: RerankCandidate[]): RerankDecision | undefined {

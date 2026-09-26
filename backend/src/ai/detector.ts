@@ -69,7 +69,7 @@ export async function detectReference(segments: Segment[], speakerId: string, no
   const weekday = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
   const text = await converse({
     system: DETECTOR_SYSTEM,
-    maxTokens: 150,
+    maxTokens: 300,
     messages: [
       {
         role: 'user',
@@ -97,5 +97,5 @@ export async function detectReference(segments: Segment[], speakerId: string, no
 export function retrievalQueries(detection: Detection): string[] {
   return [...new Set([detection.literalQuery, detection.visualQuery, detection.entityQuery, detection.query]
     .map((q) => q?.trim().slice(0, 300))
-    .filter((q): q is string => !!q))];
+    .filter((q): q is string => !!q))].slice(0, 3);
 }
