@@ -135,14 +135,29 @@ targets:
       path: Extensions/NotificationService/NotificationService.entitlements
       properties:
         com.apple.security.application-groups: [group.$(NUDGE_BUNDLE_ID)]
+  NudgeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Nudge
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NUDGE_BUNDLE_ID).UITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Nudge
 schemes:
   Nudge:
     build:
       targets:
         Nudge: all
+        NudgeUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
+      targets:
+        - NudgeUITests
     archive:
       config: Release

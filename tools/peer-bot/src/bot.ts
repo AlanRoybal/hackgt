@@ -98,6 +98,7 @@ export class Bot {
         this.mark("display", { kind: state.kind, shareId: state.kind === "self" ? null : state.photo.shareId });
       },
     });
+    this.mark("call.joining", { attendeeId: join.attendee?.AttendeeId ?? join.attendee?.Attendee?.AttendeeId });
     await page.page.evaluate((m: unknown, a: unknown) => (window as any).nudgeBot.join(m, a), join.meeting, join.attendee);
     this.mark("call.joined", { callId });
   }

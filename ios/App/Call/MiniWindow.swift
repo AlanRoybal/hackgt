@@ -93,6 +93,14 @@ struct PhotoContent: View {
     let image: PhotoImage
 
     var body: some View {
+        // scaledToFill reports a size larger than the proposal; hosting it in an overlay on a flexible
+        // Color keeps the mini window's layout at its fixed frame, then clipped() trims the overflow.
+        Color.clear
+            .overlay { content }
+            .clipped()
+    }
+
+    @ViewBuilder private var content: some View {
         switch image {
         case .url(let url):
             AsyncImage(url: url) { phase in

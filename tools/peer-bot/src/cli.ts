@@ -1,5 +1,6 @@
 import { twoBots } from "./scenarios/two-bots.js";
 import { standIn } from "./scenarios/stand-in.js";
+import { appE2E } from "./scenarios/app-e2e.js";
 
 const [cmd, ...rest] = process.argv.slice(2);
 const flag = (name: string) => rest.includes(`--${name}`);
@@ -24,6 +25,11 @@ switch (cmd) {
       speechWav: value("speech"),
     });
     break;
+  }
+  case "app-e2e": {
+    const run = value("run");
+    if (!run) throw new Error("--run <id> is required");
+    process.exit((await appE2E(run)) ? 0 : 1);
   }
   default:
     console.log(`usage:

@@ -20,8 +20,10 @@ declare global {
 let session: DefaultMeetingSession | undefined;
 
 const api = {
+  stage: "idle",
   async join(meeting: unknown, attendee: unknown): Promise<void> {
-    const logger = new ConsoleLogger("bot", LogLevel.WARN);
+    api.stage = "config";
+    const logger = new ConsoleLogger("bot", (window as any).__chimeLogLevel ?? LogLevel.WARN);
     const devices = new DefaultDeviceController(logger);
     const config = new MeetingSessionConfiguration(meeting, attendee);
     session = new DefaultMeetingSession(config, logger, devices);
@@ -40,13 +42,18 @@ const api = {
     av.realtimeSubscribeToReceiveDataMessage("photo", (m: DataMessage) =>
       window.__onData(m.text(), m.timestampMs, m.senderAttendeeId),
     );
-    const mics = await av.listAudioInputDevices();
-    if (mics[0]) await av.startAudioInput(mics[0].deviceId);
-    const cams = await av.listVideoInputDevices();
-    if (cams[0]) await av.startVideoInput(cams[0].deviceId);
+    api.stage = "devices";
+    if (!(window as any).__noMedia) {
+      const mics = await av.listAudioInputDevices();
+      if (mics[0]) await av.startAudioInput(mics[0].deviceId);
+      const cams = await av.listVideoInputDevices();
+      if (cams[0]) await av.startVideoInput(cams[0].deviceId);
+    }
+    api.stage = "starting";
     av.start();
     await started;
-    av.startLocalVideoTile();
+    api.stage = "started";
+    if (!(window as any).__noMedia) av.startLocalVideoTile();
   },
 
   send(json: string): void {

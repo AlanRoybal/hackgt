@@ -82,6 +82,16 @@ public final class CallController {
         phase = .connecting
         startedAt = nil
         endedAt = nil
+        // Someone who tapped "Not now" on the mic/camera primer is asked here, at the moment it matters.
+        log.notice("join \(callId, privacy: .public): mic=\(AVAudioApplication.shared.recordPermission.rawValue, privacy: .public)")
+        guard await Self.ensureMicrophone() else {
+            log.error("join blocked: microphone permission denied")
+            self.error = "Nudge needs the microphone for calls. Turn it on in Settings."
+            phase = .ended
+            return
+        }
+        let camera = await Self.ensureCamera() // camera off is fine; the call continues audio-only
+        log.notice("join: permissions ok, camera=\(camera, privacy: .public)")
         do {
             let join = try await api.join(callId: callId)
             peer = join.peer
@@ -96,7 +106,21 @@ public final class CallController {
             session.audioVideo.addVideoTileObserver(observer: bridge)
             session.audioVideo.addRealtimeDataMessageObserver(topic: PhotoShareMessage.topic, observer: bridge)
             session.audioVideo.addRealtimeTranscriptEventObserver?(observer: bridge)
-            try session.audioVideo.start(callKitEnabled: viaCallKit)
+            log.notice("join: starting Chime session")
+            // start() sets up the audio unit synchronously and can block for a long time; keep it off the main actor.
+            let box = UncheckedSendable(session.audioVideo)
+            #if targetEnvironment(simulator)
+            // The simulator's audio unit waits on the Mac's microphone permission and never starts headless.
+            // Join without audio devices so meeting, video and photo data messages still run (D-300).
+            let avConfig = AudioVideoConfiguration(audioDeviceCapabilities: .none)
+            #else
+            let avConfig = AudioVideoConfiguration(callKitEnabled: viaCallKit)
+            #endif
+            let configBox = UncheckedSendable(avConfig)
+            try await Task.detached(priority: .userInitiated) {
+                try box.value.start(audioVideoConfiguration: configBox.value)
+            }.value
+            log.notice("join: Chime start returned")
             try? session.audioVideo.startLocalVideo()
             session.audioVideo.startRemoteVideo()
             setUpPhotos(callId: callId)
@@ -105,6 +129,22 @@ public final class CallController {
             log.error("join failed: \(String(describing: error), privacy: .public)")
             self.error = "Couldn't connect the call."
             phase = .ended
+        }
+    }
+
+    static func ensureMicrophone() async -> Bool {
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted: return true
+        case .denied: return false
+        default: return await AVAudioApplication.requestRecordPermission()
+        }
+    }
+
+    static func ensureCamera() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized: return true
+        case .notDetermined: return await AVCaptureDevice.requestAccess(for: .video)
+        default: return false
         }
     }
 
@@ -404,4 +444,11 @@ private final class ChimeBridge: NSObject, AudioVideoObserver, VideoTileObserver
             main { $0.receiveChimeTranscript(text: text, attendeeId: attendee, startMs: start, endMs: end, resultId: rid) }
         }
     }
+}
+
+
+/// Chime's facade isn't annotated Sendable; the SDK documents start() as callable off the main thread.
+private struct UncheckedSendable<T>: @unchecked Sendable {
+    let value: T
+    init(_ value: T) { self.value = value }
 }

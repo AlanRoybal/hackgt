@@ -84,3 +84,17 @@ Newest at the bottom. Each entry: decision, why, consequence.
 **D-109 Summaries keep topics without dates.** Every extracted topic is stored `open`; only topics with `followUpAfter` can drive follow-up nudges.
 
 **D-110 Consumers drop messages for deleted records.** Delay / summarize SQS consumers treat 404 (nudge or call deleted with an account) and 409 (already handled) as done instead of retrying into the DLQ.
+
+## Integration (D-300+)
+
+**D-300 Simulator calls join without audio devices.** On the iOS simulator, Chime's audio unit waits on the host Mac's microphone access and never starts in a headless or locked session. Simulator builds start the meeting with `AudioDeviceCapabilities.none` so the meeting, video and `photo` data messages still run; device builds use full audio + CallKit. Call duration on the simulator is therefore undercounted (the timer starts on audio start).
+
+**D-301 Mic/camera asked at join time.** If the onboarding primers were skipped, `CallController.join` now requests microphone (required) and camera (optional; the call continues audio-only) right before joining, instead of failing with `audioPermissionError`.
+
+**D-302 Chime `start()` off the main actor.** It sets up the audio unit synchronously and can block; it now runs in a detached task.
+
+**D-303 In-app banner from the WebSocket.** A `nudge.updated` for a live, unanswered nudge now shows the banner directly. Previously the banner only appeared from the foreground APNs push, so it depended on push timing (and never appeared without an APNs key).
+
+**D-304 Photo overflow in the mini window.** `scaledToFill` made the photo report a larger size than the 112×160 window, so the clip shape grew with it. The photo is now an overlay on a fixed container and clipped.
+
+**D-305 End-to-end harness.** `tools/e2e/ios-e2e.sh` builds the app, installs it on a simulator, and runs `ios/UITests/E2ETests` against the deployed dev stack while `peer-bot app-e2e` plays the friend: dev sign-in → Terms → handle → friend request → message → in-app nudge → Accept → Chime call → bot's photo appears in the app's mini window → End call → summary. Set `BOT_NO_MEDIA=1` when the host can't capture media (a locked macOS session blocks `getUserMedia` for every process, including Chrome's fake devices); the bot then joins with data messages only.

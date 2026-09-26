@@ -73,14 +73,18 @@ export async function openBotPage(opts: {
     "--autoplay-policy=no-user-gesture-required",
   ];
   if (opts.speechWav) args.push(`--use-file-for-fake-audio-capture=${resolve(opts.speechWav)}`);
-  const browser = await puppeteer.launch({ headless: true, args });
+  const browser = await puppeteer.launch({ headless: true, args, protocolTimeout: 60_000 });
   const page = await browser.newPage();
   page.on("pageerror", (e) => console.error(`[${opts.name} page] ${e}`));
   page.on("console", (m) => {
-    if (m.type() === "error") console.error(`[${opts.name} page] ${m.text()}`);
+    if (m.type() === "error" || process.env.BOT_PAGE_LOGS) console.error(`[${opts.name} page] ${m.text()}`);
   });
   await page.exposeFunction("__onData", opts.onData);
   await page.exposeFunction("__onEvent", (n: string, d: string) => opts.onEvent?.(n, d));
+  // BOT_NO_MEDIA=1 joins without mic/camera (data messages only) — for hosts where media capture is blocked,
+  // e.g. a locked macOS session.
+  if (process.env.BOT_NO_MEDIA) await page.evaluateOnNewDocument(() => ((window as any).__noMedia = true));
+  if (process.env.BOT_PAGE_LOGS) await page.evaluateOnNewDocument(() => ((window as any).__chimeLogLevel = 2)); // INFO
   await page.goto(url);
   await page.waitForFunction(() => !!(window as any).nudgeBot);
   return { browser, page, close: () => browser.close() };

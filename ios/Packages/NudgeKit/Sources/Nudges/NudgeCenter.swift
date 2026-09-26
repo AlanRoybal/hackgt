@@ -77,15 +77,25 @@ public final class NudgeCenter {
         if n.myResponse == .accepted, !n.state.isTerminal {
             waiting = n
             await socket?.setWaiting(nudgeId: n.id)
-        } else if n.myResponse == nil, n.state == .pending || n.state == .acceptedByOne {
+        } else if Self.needsResponse(n) {
             banner = n
         }
+    }
+
+    /// A live nudge I haven't answered yet.
+    public static func needsResponse(_ n: Nudge) -> Bool {
+        n.myResponse == nil && (n.state == .pending || n.state == .acceptedByOne)
     }
 
     public func apply(_ event: ServerEvent) {
         switch event {
         case .nudgeUpdated(let n):
-            if banner?.id == n.id { banner = n.state.isTerminal || n.myResponse != nil ? nil : n }
+            if banner?.id == n.id {
+                banner = n.state.isTerminal || n.myResponse != nil ? nil : n
+            } else if banner == nil, waiting?.id != n.id, Self.needsResponse(n) {
+                // The WebSocket usually beats the APNs push while the app is open; don't wait for the push.
+                banner = n
+            }
             if waiting?.id == n.id {
                 waiting = n
                 if n.state == .matched || n.state == .inCall, let callId = n.callId { onMatched?(callId, n) }
