@@ -21,4 +21,4 @@ put "$BASE/apns/p8" SecureString "$(cat "$P8")"
 # Sign in with Apple: the native flow's identity token audience is the bundle ID.
 put "$BASE/apple/bundleId" String "$BUNDLE_ID"
 
-echo "Done. Lambdas cache these per container; redeploy (npm run deploy:$STAGE) or wait for new containers to pick them up."
+echo "Done. Running Lambdas pick these up within a minute; no redeploy needed."

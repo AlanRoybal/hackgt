@@ -12,9 +12,18 @@ export interface ApnsConfig {
 }
 
 let configPromise: Promise<ApnsConfig | null> | undefined;
+let missingSince = 0;
+const MISSING_RETRY_MS = 60_000;
 
-/** Loads `/nudge/<stage>/apns/*`. Null when the key isn't configured yet (no Apple team). */
+/**
+ * Loads `/nudge/<stage>/apns/*`. Null when the key isn't configured yet (no Apple team). A miss is re-checked after
+ * a minute so warm containers pick up newly stored keys without a redeploy.
+ */
 export function apnsConfig(): Promise<ApnsConfig | null> {
+  if (missingSince && Date.now() - missingSince > MISSING_RETRY_MS) {
+    configPromise = undefined;
+    missingSince = 0;
+  }
   configPromise ??= (async () => {
     const base = `/nudge/${env.stage}/apns`;
     try {
@@ -22,10 +31,14 @@ export function apnsConfig(): Promise<ApnsConfig | null> {
         new GetParametersCommand({ Names: ['keyId', 'teamId', 'p8', 'bundleId'].map((n) => `${base}/${n}`), WithDecryption: true }),
       );
       const v = Object.fromEntries((r.Parameters ?? []).map((p) => [p.Name!.split('/').pop()!, p.Value!]));
-      if (!v.keyId || !v.teamId || !v.p8 || !v.bundleId) return null;
+      if (!v.keyId || !v.teamId || !v.p8 || !v.bundleId) {
+        missingSince = Date.now();
+        return null;
+      }
       return v as unknown as ApnsConfig;
     } catch (e) {
       console.warn('apns config unavailable', (e as any)?.name);
+      missingSince = Date.now();
       return null;
     }
   })();
