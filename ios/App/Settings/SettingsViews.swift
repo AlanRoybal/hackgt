@@ -32,6 +32,8 @@ struct SettingsView: View {
                         RowDivider().padding(.leading, 52)
                         SettingsLink(icon: "calendar", tint: .sky, title: "Calendars", value: "Apple") { CalendarSettingsView() }
                         RowDivider().padding(.leading, 52)
+                        SettingsLink(icon: "heart.fill", tint: .rose, title: "WHOOP", value: "Optional") { WhoopSettingsView() }
+                        RowDivider().padding(.leading, 52)
                         SettingsLink(icon: "photo.on.rectangle", tint: .butter, title: "Photos", value: app.settings.settings.photoMode.title) { PhotoSettingsView() }
                         RowDivider().padding(.leading, 52)
                         SettingsLink(icon: "sparkles", tint: .mint, title: "Memory", value: app.settings.settings.memoryEnabled ? "On" : "Off") { MemorySettingsView() }

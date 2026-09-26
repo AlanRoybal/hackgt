@@ -29,6 +29,29 @@ public struct NudgeAPI: Sendable {
 
     public func me() async throws -> MeResponse { try await client.request(.get, "/me") }
 
+    public struct WhoopStatus: Decodable, Sendable {
+        public let connected: Bool
+        public let sleepEnabled: Bool
+        public let workoutEnabled: Bool
+        public let syncedAt: Date?
+        public let sleepStart: String?
+        public let sleepEnd: String?
+        public let workoutUntil: Date?
+        public let syncFailed: Bool
+    }
+    public struct WhoopAuthorization: Decodable, Sendable { public let url: URL }
+    struct WhoopCallback: Encodable, Sendable { let code: String; let state: String }
+    struct WhoopOptions: Encodable, Sendable { let sleepEnabled: Bool; let workoutEnabled: Bool }
+    public func whoopStatus() async throws -> WhoopStatus { try await client.request(.get, "/me/whoop") }
+    public func connectWhoop() async throws -> WhoopAuthorization { try await client.request(.post, "/me/whoop/connect") }
+    public func finishWhoop(code: String, state: String) async throws -> WhoopStatus {
+        try await client.request(.post, "/me/whoop/callback", body: WhoopCallback(code: code, state: state))
+    }
+    public func updateWhoop(sleep: Bool, workout: Bool) async throws -> WhoopStatus {
+        try await client.request(.patch, "/me/whoop", body: WhoopOptions(sleepEnabled: sleep, workoutEnabled: workout))
+    }
+    public func disconnectWhoop() async throws { try await client.send(.delete, "/me/whoop") }
+
     public func updateMe(_ patch: MePatch) async throws -> MeResponse {
         try await client.request(.patch, "/me", body: patch)
     }

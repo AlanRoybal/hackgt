@@ -115,5 +115,7 @@ struct FullTermsView: View {
     5. Contacts. If you choose to find friends from contacts, phone numbers are normalized and hashed on your device. Only the hashes are sent, and they are not stored.
 
     6. Deletion. You can delete your photos, memories, or account at any time in Settings. Deleting your account removes all of your data.
+
+    7. Optional WHOOP connection. If you connect WHOOP, Nudge reads recent sleep and workout records to estimate usual sleep hours and a short buffer after workouts. Nudge stores authorization tokens and derived time windows, not the raw activity records. These estimates may be delayed and do not establish whether you are currently asleep or exercising. Your friends do not see this data. You can disable either estimate or disconnect WHOOP in Settings.
     """
 }
