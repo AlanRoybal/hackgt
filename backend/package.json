@@ -1,0 +1,44 @@
+{
+  "name": "nudge-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run test",
+    "integ": "vitest run integ --no-file-parallelism",
+    "synth": "cdk synth -c stage=dev",
+    "deploy:dev": "cdk deploy -c stage=dev --require-approval never --outputs-file cdk-outputs.dev.json",
+    "destroy:dev": "cdk destroy -c stage=dev --force"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.163",
+    "@types/node": "^22.20.4",
+    "@types/ws": "^8.18.1",
+    "aws-cdk": "^2.1143.0",
+    "esbuild": "^0.28.2",
+    "fast-check": "^4.10.2",
+    "sharp": "^0.35.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2",
+    "ws": "^8.21.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.1141.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1141.0",
+    "@aws-sdk/client-chime-sdk-meetings": "^3.1141.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1141.0",
+    "@aws-sdk/client-dynamodb": "^3.1141.0",
+    "@aws-sdk/client-rekognition": "^3.1141.0",
+    "@aws-sdk/client-s3": "^3.1141.0",
+    "@aws-sdk/client-s3vectors": "^3.1141.0",
+    "@aws-sdk/client-sqs": "^3.1141.0",
+    "@aws-sdk/client-ssm": "^3.1141.0",
+    "@aws-sdk/lib-dynamodb": "^3.1141.0",
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
+    "aws-cdk-lib": "^2.271.0",
+    "constructs": "^10.8.1",
+    "jose": "^6.2.12"
+  }
+}

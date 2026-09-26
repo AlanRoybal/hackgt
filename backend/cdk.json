@@ -1,0 +1,7 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "context": {
+    "stage": "dev",
+    "budgetEmail": "alan@elarahealthai.com"
+  }
+}
