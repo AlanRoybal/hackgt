@@ -2,6 +2,8 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { befriend, call, cleanup, makeUser, openSocket, until, type TestUser } from './client.js';
 
+const statusOf = (p: Promise<{ status: number }>) => p.then((r) => r.status, (e) => e.status as number);
+
 const users: TestUser[] = [];
 afterAll(() => cleanup(...users));
 
@@ -102,19 +104,27 @@ describe('nudges', () => {
     }
   });
 
-  it('NUD-12: one accepts, the other skips → auto follow-up message from the skipper + push to the accepter', async () => {
+  it('NUD-12: one accepts, the other skips → skipper approves the drafted follow-up, then it reaches the accepter', async () => {
     const [a, b] = await pair('skip');
     const id = await matchNudge(a, b);
     await a.req('POST', `/nudges/${id}/respond`, { action: 'accept' });
     const n = await b.req('POST', `/nudges/${id}/respond`, { action: 'skip' });
     expect(n.state).toBe('skipped');
+    expect(n.followUpDraft.length).toBeGreaterThan(5);
+    expect((await a.req('GET', `/nudges/${id}`)).followUpDraft).toBeUndefined();
+    expect((await pushes(b)).some((p) => p.kind === 'alert' && p.payload.type === 'followup.draft')).toBe(true);
+    // Nothing is sent before approval.
+    expect((await a.req('GET', `/friends/${b.id}/messages`)).messages.some((x: any) => x.kind === 'auto_followup')).toBe(false);
+    const sent = await b.req('POST', `/nudges/${id}/followup`, { action: 'send', body: '  Edited: talk tonight?  ' });
+    expect(sent.followUpDraft).toBeUndefined();
+    expect(await statusOf(call('POST', `/nudges/${id}/followup`, b.token, { action: 'send' }))).toBe(409);
     const msgs = await until(async () => {
       const m = (await a.req('GET', `/friends/${b.id}/messages`)).messages;
       return m.some((x: any) => x.kind === 'auto_followup') ? m : undefined;
     });
     const auto = msgs.find((m: any) => m.kind === 'auto_followup');
     expect(auto.senderId).toBe(b.id);
-    expect(auto.body.length).toBeGreaterThan(5);
+    expect(auto.body).toBe('Edited: talk tonight?');
     expect(msgs.some((m: any) => m.kind === 'system' && m.body === 'Missed nudge')).toBe(true);
     expect((await pushes(a)).some((p) => p.kind === 'alert' && p.payload.type === 'message.new')).toBe(true);
     expect((await pushes(a)).some((p) => p.kind === 'background' && p.payload.type === 'nudge.cleanup')).toBe(true);
@@ -135,8 +145,21 @@ describe('nudges', () => {
     expect(n.theirResponse).toBe('expired');
     const msgs = (await a.req('GET', `/friends/${b.id}/messages`)).messages;
     expect(msgs.some((m: any) => m.kind === 'auto_followup')).toBe(false);
-    // With the default (message), expiry sends one.
+    // With the default (message), expiry drafts one.
     await b.req('PATCH', '/me', { settings: { skipBehavior: 'message', frequency: 'high' } });
+  });
+
+  it('NUD-12: a discarded draft is never sent', async () => {
+    const [a, b] = await pair('disc');
+    const id = await matchNudge(a, b);
+    await a.req('POST', `/nudges/${id}/respond`, { action: 'accept' });
+    await b.req('POST', `/nudges/${id}/respond`, { action: 'skip' });
+    expect(await statusOf(call('POST', `/nudges/${id}/followup`, a.token, { action: 'send' }))).toBe(404);
+    const n = await b.req('POST', `/nudges/${id}/followup`, { action: 'discard' });
+    expect(n.followUpDraft).toBeUndefined();
+    expect(await statusOf(call('POST', `/nudges/${id}/followup`, b.token, { action: 'send' }))).toBe(409);
+    const msgs = (await a.req('GET', `/friends/${b.id}/messages`)).messages;
+    expect(msgs.some((m: any) => m.kind === 'auto_followup')).toBe(false);
   });
 
   it('NUD-5: "less" skips and steps frequency down; undo restores it', async () => {

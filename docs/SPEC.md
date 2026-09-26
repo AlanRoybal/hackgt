@@ -84,7 +84,7 @@ Verification tags used below: **[U]** unit test · **[I]** backend integration t
 
 **NUD-11 Both accept.** When the second person accepts, a Chime meeting is created; participants on the waiting screen get `call.matched` over WebSocket; others get a VoIP push and CallKit rings. [I] [D] [2P]
 
-**NUD-12 One skips.** When one accepts and the other skips/expires: if the skipper's `skipBehavior=message`, a short warm Nova-generated message from the skipper appears in the accepter's thread (push delivered); if `nothing`, nothing is sent. The accepter's waiting screen shows "<nickname> can't right now". [I] [E message tone smoke check]
+**NUD-12 One skips.** When one accepts and the other skips/expires: if the skipper's `skipBehavior=message`, a short warm Nova-generated message is drafted for the skipper, who gets it in an approval sheet (in app) or a `followup.draft` push (Send / Edit / Don't send). Only once they send it (as written or edited) does it appear in the accepter's thread (push delivered); a discarded or ignored draft is never sent. If `nothing`, nothing is drafted. The accepter's waiting screen shows "<nickname> can't right now". [I] [E message tone smoke check]
 
 **NUD-13 Call now.** From a friend's profile I can tap Call now; the friend gets a direct nudge ("Alan wants to call. Free?") with me pre-accepted; same flow as NUD-11/12. [I]
 
