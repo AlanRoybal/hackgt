@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-// Appendix A tokens. Light-mode *Strong* values and `inkTertiary` are darkened just enough to
-// pass WCAG AA (4.5:1) on their pastel fills and on white — see D-201 and ios/scripts/contrast.py.
+// Figma "Foundations" variables (file vuY63Cyxj1fZyDHbMjwSL6). Light-mode *Strong* values and `inkTertiary` are the
+// AA-adjusted ones from D-201 as the Figma file settled them; skyStrong isn't in the file yet and keeps D-201's value.
 
 extension UIColor {
     convenience init(hex: UInt32, alpha: CGFloat = 1) {
@@ -25,20 +25,20 @@ public enum Palette {
     public static let divider = Color(light: 0xECE7E0, dark: 0x2F3240)
     public static let ink = Color(light: 0x1F2330, dark: 0xF2F1F6)
     public static let inkSecondary = Color(light: 0x5B6172, dark: 0xA9ADBB)
-    public static let inkTertiary = Color(light: 0x6D727C, dark: 0x828796)
+    public static let inkTertiary = Color(light: 0x676D7B, dark: 0x828796)
 
     public static let lavender = Color(light: 0xE4DDFB, dark: 0x3A3358)
-    public static let lavenderStrong = Color(light: 0x6052BD, dark: 0xC9BEFF)
+    public static let lavenderStrong = Color(light: 0x5F4FCC, dark: 0xC9BEFF)
     public static let mint = Color(light: 0xD5F0E3, dark: 0x23423A)
-    public static let mintStrong = Color(light: 0x277553, dark: 0x9FE0C2)
+    public static let mintStrong = Color(light: 0x237558, dark: 0x9FE0C2)
     public static let peach = Color(light: 0xFFE2D3, dark: 0x4A3128)
-    public static let peachStrong = Color(light: 0x9F5130, dark: 0xFFBFA0)
+    public static let peachStrong = Color(light: 0x9E5129, dark: 0xFFBFA0)
     public static let sky = Color(light: 0xDCEBFA, dark: 0x233447)
     public static let skyStrong = Color(light: 0x3569A5, dark: 0xA9CCF2)
     public static let butter = Color(light: 0xFCF0C4, dark: 0x463E22)
-    public static let butterStrong = Color(light: 0x83680F, dark: 0xF2DB8A)
+    public static let butterStrong = Color(light: 0x866612, dark: 0xF2DB8A)
     public static let rose = Color(light: 0xFADADF, dark: 0x4A262D)
-    public static let roseStrong = Color(light: 0xB13647, dark: 0xFFA9B5)
+    public static let roseStrong = Color(light: 0xB23346, dark: 0xFFA9B5)
 
     /// In-call chrome sits on video, so it's fixed dark regardless of appearance.
     public static let callScrim = Color(red: 0.08, green: 0.09, blue: 0.11)
@@ -95,6 +95,30 @@ public enum Radius {
     public static let input: CGFloat = 12
     public static let card: CGFloat = 20
     public static let sheet: CGFloat = 28
+}
+
+/// Avatar sizes (Figma "Avatar" component: 28 / 40 / 56 / 96). `row` is the conversation-row avatar
+/// (Figma "Skeleton / Message row"); friend rows use `large`.
+public enum AvatarSize {
+    public static let small: CGFloat = 28
+    public static let medium: CGFloat = 40
+    public static let row: CGFloat = 48
+    public static let large: CGFloat = 56
+    public static let hero: CGFloat = 96
+}
+
+/// Shared list-cell geometry, so every grouped list lines up the same way.
+public enum RowMetrics {
+    /// Minimum height of a single-line list cell.
+    public static let minHeight: CGFloat = 52
+    /// Leading icon tile in settings-style rows.
+    public static let iconTile: CGFloat = 30
+    /// Hairline inset for rows that lead with an avatar: margin + avatar + gap, so it starts under the text.
+    public static let avatarDividerInset: CGFloat = Space.m + AvatarSize.row + Space.s
+    /// Hairline inset for friend rows (56-pt avatar).
+    public static let friendDividerInset: CGFloat = Space.m + AvatarSize.large + Space.s
+    /// Hairline inset for rows that lead with an icon tile.
+    public static let iconDividerInset: CGFloat = Space.m + iconTile + Space.s
 }
 
 /// Figma "Motion" page / variable collection "Motion". Under Reduce Motion every move, scale and spring
@@ -240,7 +264,10 @@ public struct MotionClock: Equatable, Sendable {
 public enum Typography {
     /// Large titles and friend names: SF Pro Rounded Semibold.
     public static let largeTitle = Font.system(.largeTitle, design: .rounded, weight: .semibold)
-    public static let title = Font.system(.title2, design: .rounded, weight: .semibold)
+    /// Figma "Title 3 Rounded": sheet titles, call header.
+    public static let title = Font.system(.title3, design: .rounded, weight: .semibold)
+    /// Figma "Title 3": empty-state titles.
+    public static let title3 = Font.title3.weight(.semibold)
     public static let friendName = Font.system(.headline, design: .rounded, weight: .semibold)
     public static let friendNameLarge = Font.system(.title, design: .rounded, weight: .semibold)
     public static let headline = Font.headline
@@ -264,5 +291,11 @@ extension View {
     public func nudgeCard(padding: CGFloat = Space.m, fill: Color = Palette.surface) -> some View {
         self.padding(padding)
             .background(fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+    }
+
+    /// Every sheet: the 28-pt sheet radius over the app background.
+    public func nudgeSheet() -> some View {
+        presentationCornerRadius(Radius.sheet)
+            .presentationBackground(Palette.bg)
     }
 }

@@ -121,20 +121,29 @@ public struct FriendRow: View {
         }
     }
 
+    /// Figma "Friend row": 56-pt avatar, nickname + handle on one line, footnote status with a dot for free/busy.
     public var body: some View {
         HStack(spacing: Space.s) {
-            AvatarView(user: friend.user, name: friend.name, size: 44, ring: friend.freeNow, ringOpacity: pulse)
+            AvatarView(user: friend.user, name: friend.name, size: AvatarSize.large, ring: friend.freeNow, ringOpacity: pulse)
             VStack(alignment: .leading, spacing: 2) {
-                Text(friend.name).font(Typography.friendName).foregroundStyle(Palette.ink)
-                HStack(spacing: Space.xxs) {
-                    if friend.freeNow { Circle().fill(Palette.mintStrong).frame(width: 6, height: 6).opacity(pulse) }
-                    Text(status).font(.subheadline).foregroundStyle(statusTint)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(friend.name).font(Typography.friendName).foregroundStyle(Palette.ink).layoutPriority(1)
+                    Text("@\(friend.user.handle)").font(.subheadline).foregroundStyle(Palette.inkSecondary)
+                }
+                .lineLimit(1)
+                HStack(spacing: 6) {
+                    if friend.freeNow {
+                        Circle().fill(Palette.mintStrong).frame(width: 8, height: 8).opacity(pulse)
+                    } else if friend.lastCallAt == nil {
+                        Circle().fill(Palette.inkTertiary).frame(width: 8, height: 8)
+                    }
+                    Text(status).font(friend.freeNow ? .footnote.weight(.semibold) : .footnote).foregroundStyle(statusTint)
                 }
             }
             Spacer(minLength: Space.xs)
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.inkTertiary)
+            Chevron()
         }
-        .padding(.vertical, Space.s)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
@@ -171,20 +180,23 @@ public struct TopicChip: View {
     }
 
     public var body: some View {
-        HStack(spacing: Space.xs) {
-            Text(title).font(.subheadline.weight(.medium)).foregroundStyle(Palette.butterStrong)
+        // Figma "Memory topic chip": lightbulb, Subheadline Emphasized, 12/6 padding, optional ✕.
+        HStack(spacing: Space.xxs) {
+            Image(systemName: "lightbulb.fill").font(.caption.weight(.semibold)).accessibilityHidden(true)
+            Text(title).font(.subheadline.weight(.semibold))
             if let onRemove {
                 Button(action: onRemove) {
-                    Image(systemName: "xmark").font(.caption2.weight(.bold)).foregroundStyle(Palette.butterStrong)
+                    Image(systemName: "xmark").font(.caption2.weight(.bold))
                         .frame(width: 20, height: 20)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Remove \(title)")
             }
         }
+        .foregroundStyle(Palette.butterStrong)
         .padding(.leading, Space.s)
         .padding(.trailing, onRemove == nil ? Space.s : Space.xs)
-        .padding(.vertical, 7)
+        .padding(.vertical, 6)
         .background(Palette.butter, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
     }
 }
@@ -245,28 +257,33 @@ public struct FlowLayout: Layout {
 
 // MARK: Toast
 
+/// Figma "Toast": ink card (radius card), leading 20-pt icon, Subheadline text, optional lavender action.
 public struct ToastView: View {
     let text: String
+    let systemImage: String?
     let actionTitle: String?
     let action: (() -> Void)?
 
-    public init(text: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+    public init(text: String, systemImage: String? = nil, actionTitle: String? = nil, action: (() -> Void)? = nil) {
         self.text = text
+        self.systemImage = systemImage
         self.actionTitle = actionTitle
         self.action = action
     }
 
     public var body: some View {
         HStack(spacing: Space.s) {
-            Text(text).font(.subheadline.weight(.medium)).foregroundStyle(Palette.bg)
+            if let systemImage {
+                Image(systemName: systemImage).font(.body).foregroundStyle(Palette.bg).frame(width: 20).accessibilityHidden(true)
+            }
+            Text(text).font(.subheadline).foregroundStyle(Palette.bg).frame(maxWidth: .infinity, alignment: .leading)
             if let actionTitle, let action {
-                Divider().frame(height: 18).overlay(Palette.bg.opacity(0.3))
                 Button(actionTitle, action: action).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.lavender)
             }
         }
         .padding(.horizontal, Space.m)
-        .padding(.vertical, Space.s)
-        .background(Palette.ink, in: Capsule())
+        .padding(.vertical, 14)
+        .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 }
@@ -298,12 +315,15 @@ public struct EmptyStateView: View {
                     Ellipse().fill(Palette.surfaceAlt).frame(width: 190, height: 130)
                 }
                 .frame(width: 190, height: 130)
+                // Figma "Empty state": Title 3, Subheadline message, a 200-pt primary button.
                 VStack(spacing: Space.xs) {
-                    Text(title).font(Typography.title).foregroundStyle(Palette.ink).multilineTextAlignment(.center)
-                    Text(message).font(.body).foregroundStyle(Palette.inkSecondary).multilineTextAlignment(.center)
+                    Text(title).font(Typography.title3).foregroundStyle(Palette.ink).multilineTextAlignment(.center)
+                    Text(message).font(.subheadline).foregroundStyle(Palette.inkSecondary).multilineTextAlignment(.center)
                 }
                 if let actionTitle, let action {
-                    NudgeButton(actionTitle, kind: .primary, size: .medium, fullWidth: false, action: action).padding(.top, Space.xs)
+                    NudgeButton(actionTitle, kind: .primary, fullWidth: false, action: action)
+                        .frame(minWidth: 200)
+                        .padding(.top, Space.xs)
                 }
             }
             .motionLayer(beat.fadeUp(at: 0, fade: Motion.Durations.entranceSubtle, rise: Motion.Durations.entranceSubtle))
@@ -318,21 +338,28 @@ public struct EmptyStateView: View {
 /// Loading placeholder. Rows pulse 100 → 55% every 1.2 s, each 0.08 s behind the one above (a top-to-bottom
 /// wave). Reduce Motion: static at 70%.
 public struct SkeletonRow: View {
+    /// Figma "Skeleton": friend row (56-pt avatar) or message row (48-pt avatar, longer second line).
+    public enum Kind: Sendable { case friend, message }
     let index: Int
+    let kind: Kind
 
-    public init(index: Int = 0) { self.index = index }
+    public init(index: Int = 0, kind: Kind = .friend) {
+        self.index = index
+        self.kind = kind
+    }
 
     public var body: some View {
+        let avatar = kind == .friend ? AvatarSize.large : AvatarSize.row
         MotionTimeline(settlesAt: 0, loops: true) { beat in
             HStack(spacing: Space.s) {
-                Circle().fill(Palette.surfaceAlt).frame(width: 44, height: 44)
+                Circle().fill(Palette.surfaceAlt).frame(width: avatar, height: avatar)
                 VStack(alignment: .leading, spacing: Space.xs) {
-                    RoundedRectangle(cornerRadius: 4).fill(Palette.surfaceAlt).frame(width: 140, height: 12)
-                    RoundedRectangle(cornerRadius: 4).fill(Palette.surfaceAlt).frame(width: 90, height: 10)
+                    Capsule().fill(Palette.surfaceAlt).frame(width: 140, height: 14)
+                    Capsule().fill(Palette.surfaceAlt).frame(width: kind == .friend ? 96 : 220, height: 12)
                 }
-                Spacer()
+                Spacer(minLength: 0)
             }
-            .padding(.vertical, Space.s)
+            .padding(.vertical, 10)
             .opacity(beat.reduceMotion ? 0.7
                 : IdleMotion.dim(beat.t, period: Motion.Period.shimmer, low: 0.55, offset: Motion.Stagger.expressive * Double(index)))
         }
@@ -381,20 +408,28 @@ public struct NudgeTextFieldStyle: TextFieldStyle {
             .font(.body)
             .foregroundStyle(Palette.ink)
             .padding(.horizontal, Space.m)
-            .frame(minHeight: 52)
+            .frame(minHeight: 50)
             .background(Palette.surfaceAlt, in: RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Radius.input, style: .continuous)
-                    .strokeBorder(borderColor, lineWidth: state == .normal ? 0 : 1.5)
+                    .strokeBorder(Self.borderColor(state), lineWidth: Self.borderWidth(state))
             }
     }
 
-    var borderColor: Color {
+    /// Figma "Text field": focused 2-pt lavenderStrong, error 1.5-pt roseStrong; valid shows a check, no border.
+    public static func borderColor(_ state: State) -> Color {
         switch state {
-        case .normal: .clear
+        case .normal, .valid: .clear
         case .focused: Palette.lavenderStrong
-        case .valid: Palette.mintStrong
         case .error: Palette.roseStrong
+        }
+    }
+
+    public static func borderWidth(_ state: State) -> CGFloat {
+        switch state {
+        case .normal, .valid: 0
+        case .focused: 2
+        case .error: 1.5
         }
     }
 }
@@ -410,9 +445,143 @@ public struct CardList<Content: View>: View {
     }
 }
 
+/// 1-pt hairline between rows. `inset` is where it starts, usually under the row's text
+/// (see `RowMetrics.avatarDividerInset` / `iconDividerInset`).
 public struct RowDivider: View {
+    let inset: CGFloat
+    public init(inset: CGFloat = Space.m) { self.inset = inset }
+    public var body: some View {
+        Rectangle().fill(Palette.divider).frame(height: 1).padding(.leading, inset)
+    }
+}
+
+/// Trailing disclosure chevron for rows that navigate.
+public struct Chevron: View {
     public init() {}
     public var body: some View {
-        Rectangle().fill(Palette.divider).frame(height: 1).padding(.leading, Space.m)
+        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.inkTertiary)
+            .accessibilityHidden(true)
+    }
+}
+
+/// SF Symbol on a pastel tile (settings rows, terms cards, share card).
+public struct IconTile: View {
+    let systemImage: String
+    let tint: Palette.Tint
+    let size: CGFloat
+
+    public init(_ systemImage: String, tint: Palette.Tint, size: CGFloat = RowMetrics.iconTile) {
+        self.systemImage = systemImage
+        self.tint = tint
+        self.size = size
+    }
+
+    public var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: size > 36 ? size * 0.45 : size * 0.6, weight: .medium))
+            .foregroundStyle(tint.strong)
+            .frame(width: size, height: size)
+            .background(tint.fill, in: RoundedRectangle(cornerRadius: size > 36 ? Radius.input : Radius.chip, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+/// List cell: title, optional trailing value, optional chevron.
+public struct ValueRow: View {
+    let title: String
+    let value: String?
+    let chevron: Bool
+
+    public init(_ title: String, value: String? = nil, chevron: Bool = true) {
+        self.title = title
+        self.value = value
+        self.chevron = chevron
+    }
+
+    public var body: some View {
+        HStack(spacing: Space.s) {
+            Text(title).font(.body).foregroundStyle(Palette.ink)
+            Spacer(minLength: Space.xs)
+            if let value, !value.isEmpty { Text(value).font(.body).foregroundStyle(Palette.inkSecondary).lineLimit(1) }
+            if chevron { Chevron() }
+        }
+        .padding(.horizontal, Space.m)
+        .frame(minHeight: RowMetrics.minHeight)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Figma "List cell / Destructive": centered roseStrong label, full-width tap target.
+public struct DestructiveRow: View {
+    let title: String
+    let action: () -> Void
+
+    public init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Text(title).font(.body).foregroundStyle(Palette.roseStrong)
+                .frame(maxWidth: .infinity, minHeight: RowMetrics.minHeight)
+                .padding(.horizontal, Space.m)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressFeedbackButtonStyle())
+    }
+}
+
+/// The quiet way out under a primary action ("Not now", "Skip for now").
+public struct SubtleButton: View {
+    let title: String
+    let action: () -> Void
+
+    public init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(title, action: action)
+            .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.inkSecondary)
+            .frame(minHeight: 44)
+            .buttonStyle(PressFeedbackButtonStyle())
+    }
+}
+
+// MARK: Message bubble
+
+extension View {
+    /// Figma "Message bubble": ink text on lavender (mine) or surfaceAlt (theirs), 20-pt corners with a 6-pt
+    /// tail corner on the sender's side, 14/10 padding.
+    public func messageBubble(isMine: Bool) -> some View {
+        let shape = UnevenRoundedRectangle(topLeadingRadius: Radius.card, bottomLeadingRadius: isMine ? Radius.card : 6,
+                                           bottomTrailingRadius: isMine ? 6 : Radius.card, topTrailingRadius: Radius.card,
+                                           style: .continuous)
+        return self.foregroundStyle(Palette.ink)
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(isMine ? Palette.lavender : Palette.surfaceAlt, in: shape)
+    }
+}
+
+/// Figma "Message bubble / System event": centered surfaceAlt pill with a small icon.
+public struct SystemEventPill: View {
+    let text: String
+    let systemImage: String
+
+    public init(_ text: String, systemImage: String = "bell.fill") {
+        self.text = text
+        self.systemImage = systemImage
+    }
+
+    public var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage).font(.caption2).accessibilityHidden(true)
+            Text(text).font(.caption)
+        }
+        .foregroundStyle(Palette.inkSecondary)
+        .padding(.horizontal, 10).padding(.vertical, Space.xxs)
+        .background(Palette.surfaceAlt, in: Capsule())
     }
 }
