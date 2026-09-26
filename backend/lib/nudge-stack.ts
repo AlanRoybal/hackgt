@@ -76,6 +76,15 @@ export class NudgeStack extends Stack {
     });
     vectorIndex.addResourceDependency(vectorBucket);
     vectorIndex.applyRemovalPolicy(removalPolicy);
+    const captionVectorIndex = new s3vectors.CfnIndex(this, 'CaptionVectorIndex', {
+      vectorBucketName,
+      indexName: 'photo-captions',
+      dataType: 'float32',
+      dimension: 1024,
+      distanceMetric: 'cosine',
+    });
+    captionVectorIndex.addResourceDependency(vectorBucket);
+    captionVectorIndex.applyRemovalPolicy(removalPolicy);
 
     const dlq = new sqs.Queue(this, 'DeadLetters', { retentionPeriod: Duration.days(4), removalPolicy });
     const delayQueue = new sqs.Queue(this, 'NudgeDelay', {
@@ -208,6 +217,7 @@ export class NudgeStack extends Stack {
       SUMMARIZE_QUEUE_URL: summarizeQueue.queueUrl,
       VECTOR_BUCKET: vectorBucketName,
       VECTOR_INDEX: 'photos',
+      CAPTION_VECTOR_INDEX: 'photo-captions',
       SIMILARITY_THRESHOLD: '0.37',
       TOS_VERSION: '2026-09-26',
       MEETING_TRANSCRIPTION: 'on',

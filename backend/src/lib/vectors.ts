@@ -19,14 +19,14 @@ export interface PhotoVectorMeta {
   caption?: string;
 }
 
-export async function putPhotoVector(key: string, data: number[], meta: PhotoVectorMeta) {
+export async function putPhotoVector(key: string, data: number[], meta: PhotoVectorMeta, index = env.vectorIndex) {
   const metadata: Record<string, string | number> = { userId: meta.userId, takenAt: meta.takenAt };
   if (meta.place) metadata.place = meta.place;
   if (meta.caption) metadata.caption = meta.caption.slice(0, 500);
   await client.send(
     new PutVectorsCommand({
       vectorBucketName: env.vectorBucket,
-      indexName: env.vectorIndex,
+      indexName: index,
       vectors: [{ key, data: { float32: data }, metadata }],
     }),
   );
@@ -41,7 +41,7 @@ export interface VectorHit {
 export async function queryPhotos(
   userId: string,
   vector: number[],
-  opts: { topK?: number; fromSec?: number; toSec?: number } = {},
+  opts: { topK?: number; fromSec?: number; toSec?: number; index?: string } = {},
 ): Promise<VectorHit[]> {
   const clauses: Record<string, unknown>[] = [{ userId: { $eq: userId } }];
   if (opts.fromSec !== undefined) clauses.push({ takenAt: { $gte: opts.fromSec } });
@@ -49,7 +49,7 @@ export async function queryPhotos(
   const r = await client.send(
     new QueryVectorsCommand({
       vectorBucketName: env.vectorBucket,
-      indexName: env.vectorIndex,
+      indexName: opts.index ?? env.vectorIndex,
       queryVector: { float32: vector },
       topK: opts.topK ?? 5,
       filter: (clauses.length === 1 ? clauses[0] : { $and: clauses }) as any,
@@ -65,21 +65,36 @@ export async function queryPhotos(
   }));
 }
 
-export async function deleteVectors(keys: string[]) {
+/** Caption search is additive. Old deployments keep working until the second index exists. */
+export async function queryCaptionPhotos(
+  userId: string,
+  vector: number[],
+  opts: { topK?: number; fromSec?: number; toSec?: number } = {},
+): Promise<VectorHit[]> {
+  if (!env.captionVectorIndex) return [];
+  return queryPhotos(userId, vector, { ...opts, index: env.captionVectorIndex });
+}
+
+export async function deleteVectors(keys: string[], index = env.vectorIndex) {
   for (let i = 0; i < keys.length; i += 500) {
     const chunk = keys.slice(i, i + 500);
     if (chunk.length) {
-      await client.send(new DeleteVectorsCommand({ vectorBucketName: env.vectorBucket, indexName: env.vectorIndex, keys: chunk }));
+      await client.send(new DeleteVectorsCommand({ vectorBucketName: env.vectorBucket, indexName: index, keys: chunk }));
     }
   }
 }
 
+export async function deletePhotoVectors(keys: string[]) {
+  await deleteVectors(keys);
+  if (env.captionVectorIndex) await deleteVectors(keys, env.captionVectorIndex);
+}
+
 /** Iterates every vector with metadata (used by the daily sweep). */
-export async function* listAllVectors(): AsyncGenerator<{ key: string; metadata: Record<string, any> }> {
+export async function* listAllVectors(index = env.vectorIndex): AsyncGenerator<{ key: string; metadata: Record<string, any> }> {
   let nextToken: string | undefined;
   do {
     const r = await client.send(
-      new ListVectorsCommand({ vectorBucketName: env.vectorBucket, indexName: env.vectorIndex, returnMetadata: true, nextToken }),
+      new ListVectorsCommand({ vectorBucketName: env.vectorBucket, indexName: index, returnMetadata: true, nextToken }),
     );
     for (const v of r.vectors ?? []) yield { key: v.key!, metadata: (v.metadata ?? {}) as Record<string, any> };
     nextToken = r.nextToken;

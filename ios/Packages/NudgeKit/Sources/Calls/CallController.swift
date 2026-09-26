@@ -51,6 +51,7 @@ public final class CallController {
     private var transcriber: TranscribeStreamClient?
     private var mic: MicCapture?
     private var transcriptTask: Task<Void, Never>?
+    private var transcriptBatcher: TranscriptBatcher?
     private var ownTranscribeRunning = false
     private var suggestionTimer: Task<Void, Never>?
     private let log = Logger(subsystem: "app.nudge", category: "call")
@@ -282,13 +283,14 @@ public final class CallController {
             self.mic = mic
             self.transcriber = client
             ownTranscribeRunning = true
-            let socket = self.socket
+            let batcher = makeTranscriptBatcher()
             transcriptTask = Task {
                 for await seg in stream {
                     let t = TranscriptSegment(callId: callId, segId: seg.id, text: seg.text, startMs: seg.startMs, endMs: seg.endMs,
                                               clientTs: Int64(Date().timeIntervalSince1970 * 1000))
-                    try? await socket?.send(.transcript(t))
+                    await batcher.append(t)
                 }
+                await batcher.flush()
                 await MainActor.run { self.ownTranscribeRunning = false }
             }
         } catch {
@@ -302,6 +304,8 @@ public final class CallController {
         mic = nil
         await transcriber?.stop()
         transcriber = nil
+        await transcriptBatcher?.finish()
+        transcriptBatcher = nil
         transcriptTask?.cancel()
         transcriptTask = nil
         ownTranscribeRunning = false
@@ -313,7 +317,18 @@ public final class CallController {
         guard !ownTranscribeRunning, let callId, attendeeId != peerAttendeeId else { return }
         let t = TranscriptSegment(callId: callId, segId: resultId, text: text, startMs: Int(startMs), endMs: Int(endMs),
                                   clientTs: Int64(Date().timeIntervalSince1970 * 1000))
-        Task { try? await socket?.send(.transcript(t)) }
+        let batcher = makeTranscriptBatcher()
+        Task { await batcher.append(t) }
+    }
+
+    private func makeTranscriptBatcher() -> TranscriptBatcher {
+        if let transcriptBatcher { return transcriptBatcher }
+        let socket = socket
+        let batcher = TranscriptBatcher { segment in
+            try? await socket?.send(.transcript(segment))
+        }
+        transcriptBatcher = batcher
+        return batcher
     }
 
     // MARK: Chime callbacks

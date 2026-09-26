@@ -1,7 +1,7 @@
 // S3 ObjectCreated → safety → caption → embedding → S3 Vectors (SPEC PHO-2, PHO-3).
 import type { S3Event } from 'aws-lambda';
 import { captionImage } from '../ai/caption.js';
-import { embedImage } from '../ai/embed.js';
+import { embedImage, embedText } from '../ai/embed.js';
 import { get, update } from '../lib/db.js';
 import { env } from '../lib/env.js';
 import { K } from '../lib/keys.js';
@@ -40,18 +40,22 @@ export async function indexPhoto(s3Key: string) {
     const embedding = await embedImage(bytes);
     sw.lap('embed');
     const vk = vectorKey(userId, assetHash);
-    await putPhotoVector(vk, embedding, {
+    const meta = {
       userId,
       takenAt: Math.floor(Date.parse(item.takenAt) / 1000),
       place: item.place,
       caption,
-    });
+    };
+    await putPhotoVector(vk, embedding, meta);
+    // A separate caption index adds lexical/event recall without changing the image-only index.
+    if (env.captionVectorIndex) await putPhotoVector(vk, await embedText(caption), meta, env.captionVectorIndex);
     sw.lap('vector');
     await update(K.photo(userId, assetHash), {
       status: 'indexed',
       caption,
       labels: safety.labels,
       vectorKey: vk,
+      captionVectorKey: env.captionVectorIndex ? vk : undefined,
       indexedAt: new Date().toISOString(),
     });
     emitLatency(sw.total(), { pipeline: 'photoIndex' });

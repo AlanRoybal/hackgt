@@ -1,6 +1,7 @@
 // Transcript segment → detector → retrieval → photo.suggestion (SPEC REF-1..6, REF-10).
-import { detectReference } from '../ai/detector.js';
+import { detectReference, retrievalQueries } from '../ai/detector.js';
 import { embedText } from '../ai/embed.js';
+import { rerankPhotos } from '../ai/rerank.js';
 import { get, put, query, queryPrefix } from './db.js';
 import { env } from './env.js';
 import { getCall } from './flows.js';
@@ -8,12 +9,15 @@ import { K, newId, segSk } from './keys.js';
 import { emitLatency, stopwatch } from './metrics.js';
 import { presignGet } from './s3.js';
 import { getUser } from './users.js';
-import { queryPhotos, type VectorHit } from './vectors.js';
+import { queryCaptionPhotos, queryPhotos, type VectorHit } from './vectors.js';
 import { sendToUser } from './ws.js';
 
 const CONTEXT_MS = 60_000;
 const MIN_CONFIDENCE = 0.5;
 const DAY = 86_400;
+const RETRIEVAL_TOP_K = 10;
+const RERANK_TOP_K = 8;
+const MIN_RERANK_CONFIDENCE = 0.55;
 
 export interface TranscriptInput {
   callId: string;
@@ -36,7 +40,39 @@ export function dateRange(hint?: { from?: string; to?: string }): { fromSec?: nu
 export function pickHit(hits: VectorHit[], threshold: number, alreadySuggested: Set<string>): VectorHit | undefined {
   return hits
     .filter((h) => h.similarity >= threshold && !alreadySuggested.has(h.key))
-    .sort((a, b) => b.similarity - a.similarity)[0];
+    .sort((a, b) => Number(b.metadata.fusionScore ?? b.similarity) - Number(a.metadata.fusionScore ?? a.similarity))[0];
+}
+
+/**
+ * Reciprocal-rank fusion preserves strong visual matches while allowing caption matches to recover
+ * named places, events, and activities that are not visually distinctive.
+ */
+export function fusePhotoHits(
+  imageGroups: VectorHit[][],
+  captionGroups: VectorHit[][],
+  placeHint?: string,
+): VectorHit[] {
+  const byKey = new Map<string, VectorHit>();
+  const add = (hits: VectorHit[], source: 'image' | 'caption') => {
+    hits.forEach((hit, rank) => {
+      const prior = byKey.get(hit.key);
+      const metadata = { ...(prior?.metadata ?? {}), ...hit.metadata };
+      const score = Number(prior?.metadata.fusionScore ?? 0) + (source === 'image' ? 1 : 0.8) / (60 + rank + 1);
+      metadata.fusionScore = score;
+      metadata[`${source}Similarity`] = Math.max(Number(prior?.metadata[`${source}Similarity`] ?? -1), hit.similarity);
+      byKey.set(hit.key, { key: hit.key, similarity: Math.max(prior?.similarity ?? -1, hit.similarity), metadata });
+    });
+  };
+  imageGroups.forEach((hits) => add(hits, 'image'));
+  captionGroups.forEach((hits) => add(hits, 'caption'));
+
+  const hint = new Set((placeHint ?? '').toLowerCase().match(/[a-z0-9]+/g) ?? []);
+  for (const hit of byKey.values()) {
+    const place = new Set(String(hit.metadata.place ?? '').toLowerCase().match(/[a-z0-9]+/g) ?? []);
+    const overlap = [...hint].filter((word) => place.has(word)).length;
+    if (overlap) hit.metadata.fusionScore = Number(hit.metadata.fusionScore) + Math.min(overlap, 3) * 0.002;
+  }
+  return [...byKey.values()].sort((a, b) => Number(b.metadata.fusionScore) - Number(a.metadata.fusionScore));
 }
 
 export async function handleTranscript(userId: string, input: TranscriptInput) {
@@ -80,23 +116,54 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     return { stored: true, detection };
   }
 
-  const vec = await embedText([detection.query, detection.placeHint].filter(Boolean).join(', '));
+  const queries = retrievalQueries(detection);
+  const vectors = await Promise.all(queries.map((q) => embedText([q, detection.placeHint].filter(Boolean).join(', '))));
   sw.lap('embed');
   const range = dateRange(detection.dateHint);
-  let hits = await queryPhotos(userId, vec, { topK: 5, ...range });
+  const search = async (opts: { fromSec?: number; toSec?: number }) => {
+    const imageGroups = await Promise.all(vectors.map((vec) => queryPhotos(userId, vec, { topK: RETRIEVAL_TOP_K, ...opts })));
+    // The caption index is introduced additively; unavailable/migrating indexes must not block call suggestions.
+    const captionGroups = await Promise.all(vectors.map((vec) => queryCaptionPhotos(userId, vec, { topK: RETRIEVAL_TOP_K, ...opts }).catch(() => [])));
+    return fusePhotoHits(imageGroups, captionGroups, detection.placeHint);
+  };
+  let hits = await search(range);
   const suggested = new Set(
     (await queryPrefix(`CALL#${call.id}`, 'SUGG#')).filter((s) => s.userId === userId).map((s) => `${userId}#${s.photoId}`),
   );
   let best = pickHit(hits, env.similarityThreshold, suggested);
   if (!best && (range.fromSec || range.toSec)) {
-    hits = await queryPhotos(userId, vec, { topK: 5 });
+    hits = await search({});
     best = pickHit(hits, env.similarityThreshold, suggested);
   }
   sw.lap('search');
   if (!best) {
-    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'no_match', topSimilarity: hits[0]?.similarity });
+    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'no_match', candidateCount: hits.length, topSimilarity: hits[0]?.similarity });
     return { stored: true, detection };
   }
+  const finalists = hits
+    .filter((hit) => hit.similarity >= env.similarityThreshold && !suggested.has(hit.key))
+    .slice(0, RERANK_TOP_K);
+  let rerankConfidence: number | undefined;
+  try {
+    const decision = await rerankPhotos(detection.query, finalists.map((hit) => ({
+      key: hit.key,
+      caption: typeof hit.metadata.caption === 'string' ? hit.metadata.caption : undefined,
+      place: typeof hit.metadata.place === 'string' ? hit.metadata.place : undefined,
+      takenAt: Number(hit.metadata.takenAt) || undefined,
+    })));
+    if (decision) {
+      rerankConfidence = decision.confidence;
+      if (!decision.key || decision.confidence < MIN_RERANK_CONFIDENCE) {
+        emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'rerank_no_match', candidateCount: finalists.length, rerankConfidence });
+        return { stored: true, detection };
+      }
+      best = finalists.find((hit) => hit.key === decision.key) ?? best;
+    }
+  } catch (e) {
+    // Preserve the fast vector-only path if Bedrock is briefly unavailable.
+    console.warn('photo rerank failed', (e as Error).name);
+  }
+  sw.lap('rerank');
   const photoId = best.key.split('#')[1];
   const photo = await get(K.photo(userId, photoId));
   if (!photo || photo.status !== 'indexed') return { stored: true, detection };
@@ -123,6 +190,10 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     query: detection.query,
     confidence: detection.confidence,
     similarity: best.similarity,
+    fusionScore: best.metadata.fusionScore,
+    candidateCount: hits.length,
+    queryCount: queries.length,
+    rerankConfidence,
     createdAt: new Date().toISOString(),
     stages,
     ttl: Math.floor(Date.now() / 1000) + DAY,

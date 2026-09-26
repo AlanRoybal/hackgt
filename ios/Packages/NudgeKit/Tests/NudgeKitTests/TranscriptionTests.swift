@@ -51,6 +51,34 @@ struct EventStreamTests {
     }
 }
 
+@Suite("Transcript batching")
+struct TranscriptBatcherTests {
+    @Test func mergesAdjacentFinalSegments() async {
+        let collector = SegmentCollector()
+        let batcher = TranscriptBatcher(delay: .seconds(60)) { await collector.append($0) }
+        await batcher.append(TranscriptSegment(callId: "c", segId: "one", text: "remember the", startMs: 0, endMs: 500, clientTs: 1))
+        await batcher.append(TranscriptSegment(callId: "c", segId: "two", text: "restaurant with lanterns", startMs: 550, endMs: 1_200, clientTs: 2))
+        await batcher.flush()
+        let sent = await collector.values
+        #expect(sent.count == 1)
+        #expect(sent.first?.text == "remember the restaurant with lanterns")
+    }
+
+    @Test func flushesWhenThereIsASpeechGap() async {
+        let collector = SegmentCollector()
+        let batcher = TranscriptBatcher(delay: .seconds(60)) { await collector.append($0) }
+        await batcher.append(TranscriptSegment(callId: "c", segId: "one", text: "we went hiking", startMs: 0, endMs: 500, clientTs: 1))
+        await batcher.append(TranscriptSegment(callId: "c", segId: "two", text: "anyway", startMs: 4_000, endMs: 4_200, clientTs: 2))
+        await batcher.flush()
+        #expect((await collector.values).map(\.text) == ["we went hiking", "anyway"])
+    }
+}
+
+private actor SegmentCollector {
+    var values: [TranscriptSegment] = []
+    func append(_ segment: TranscriptSegment) { values.append(segment) }
+}
+
 @Suite("SigV4")
 struct SigV4Tests {
     /// AWS docs "Deriving the signing key" example (IAM, 20120215).
