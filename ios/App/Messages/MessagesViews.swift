@@ -12,7 +12,7 @@ struct ConversationsView: View {
             ScrollView {
                 VStack(spacing: Space.l) {
                     if !app.messages.hasLoaded {
-                        CardList { ForEach(0..<4, id: \.self) { _ in SkeletonRow().padding(.horizontal, Space.m) } }
+                        CardList { ForEach(0..<4, id: \.self) { i in SkeletonRow(index: i).padding(.horizontal, Space.m) } }
                     } else if app.messages.conversations.isEmpty {
                         EmptyStateView(.messages, title: "No messages yet",
                                        message: "When a nudge doesn't work out, notes like \"I'll call you soon\" land here.")
@@ -81,6 +81,9 @@ struct ThreadView: View {
     let friendId: String
     @State private var draft = ""
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Only messages that arrive after the thread first shows animate in.
+    @State private var animatesInserts = false
 
     var name: String {
         app.messages.conversations.first { $0.id == friendId }?.name ?? app.friends.friend(id: friendId)?.name ?? "Friend"
@@ -100,10 +103,12 @@ struct ThreadView: View {
                                 .padding(.top, Space.s)
                         }
                         MessageBubble(message: m, isMine: m.senderId == me, friendName: name).id(m.id)
+                            .transition(Self.bubbleIn(isMine: m.senderId == me, reduceMotion: reduceMotion))
                     }
                 }
                 .padding(.horizontal, Space.margin)
                 .padding(.vertical, Space.s)
+                .animation(animatesInserts ? Motion.resolved(Motion.standard, reduceMotion: reduceMotion) : nil, value: messages.count)
             }
             .defaultScrollAnchor(.bottom)
             .onChange(of: messages.count) { _, _ in
@@ -135,8 +140,29 @@ struct ThreadView: View {
             .padding(.vertical, Space.xs)
             .background(Palette.bg)
         }
-        .task { if !app.isPreview { await app.messages.loadThread(friendId: friendId) } }
+        .task {
+            if !app.isPreview { await app.messages.loadThread(friendId: friendId) }
+            animatesInserts = true
+        }
         .onAppear { app.openThreadId = friendId }
+    }
+
+    /// Figma M13b: the incoming bubble fades in over 0.2 s, rising 12 pt and growing 96 → 100% from its tail corner.
+    static func bubbleIn(isMine: Bool, reduceMotion: Bool) -> AnyTransition {
+        let fade = AnyTransition.opacity.animation(.easeOut(duration: Motion.Durations.fade))
+        guard !reduceMotion else { return .asymmetric(insertion: fade, removal: .opacity) }
+        let rise = AnyTransition.modifier(active: BubbleRise(on: true, anchor: isMine ? .bottomTrailing : .bottomLeading),
+                                          identity: BubbleRise(on: false, anchor: .center))
+        return .asymmetric(insertion: fade.combined(with: rise), removal: .opacity)
+    }
+}
+
+private struct BubbleRise: ViewModifier {
+    let on: Bool
+    let anchor: UnitPoint
+
+    func body(content: Content) -> some View {
+        content.scaleEffect(on ? 0.96 : 1, anchor: anchor).offset(y: on ? 12 : 0)
     }
 }
 

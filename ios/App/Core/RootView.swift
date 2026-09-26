@@ -33,33 +33,66 @@ struct RootView: View {
             }
         }
         .transition(.opacity)
-        .animation(Motion.resolved(Motion.move, reduceMotion: reduceMotion), value: route)
+        // Screen hand-offs (Launch → Welcome, etc.) are a 0.2 s cross-fade.
+        .animation(Motion.fade, value: route)
         .onChange(of: route) { _, r in
             if r == .main || r == .setup { Task { await app.didSignIn() } }
         }
     }
 }
 
+/// Figma M01: the icon grows 25 → 100% (playful spring) while untilting 14°, its two circles lean together
+/// (pop spring from 0.25 s), the spark pops at 0.6 s then breathes, and the wordmark fades up at 0.45 s.
 struct LaunchView: View {
+    private typealias C = Motion.Curve
+
     var body: some View {
         ZStack {
             Palette.bg.ignoresSafeArea()
-            BrandMark(size: 72)
+            MotionTimeline(settlesAt: 1.1, loops: true) { beat in
+                let t = beat.t, m = beat.reduceMotion
+                VStack(spacing: Space.m) {
+                    AppIconMark(size: 96,
+                                spread: m ? 0 : 12 * (1 - C.spring(Motion.Springs.pop, t, from: 0.25)),
+                                spark: m ? 1 : C.spring(Motion.Springs.playful, t, from: 0.6)
+                                    * IdleMotion.breathe(t, from: 1.1, period: Motion.Period.pulse, peak: 1.25))
+                        .rotationEffect(.degrees(m ? 0 : 14 * (1 - C.spring(Motion.Springs.settle, t, from: 0))))
+                        .motionLayer(m ? beat.fadeIn(at: 0) : MotionLayer(
+                            opacity: C.outCubic(C.progress(t, from: 0, to: 0.2)),
+                            scale: 0.25 + 0.75 * C.spring(Motion.Springs.playful, t, from: 0)))
+                    Text("Nudge")
+                        .font(.system(.largeTitle, design: .rounded, weight: .semibold)).tracking(-0.6)
+                        .foregroundStyle(Palette.ink)
+                        .motionLayer(beat.fadeUp(at: 0.45))
+                }
+            }
         }
+        .accessibilityElement()
+        .accessibilityLabel("Nudge")
     }
 }
 
-/// The two-circle mark from the app icon.
-struct BrandMark: View {
+/// The app icon (Figma "App icon"): lavender tile, two overlapping circles and a white spark. `spread` pushes the
+/// circles apart and `spark` scales the spark, so launch and sign-in can animate the parts.
+struct AppIconMark: View {
     var size: CGFloat
+    var spread: CGFloat = 0
+    var spark: CGFloat = 1
+
     var body: some View {
-        ZStack {
-            Circle().fill(Palette.lavender).frame(width: size, height: size).offset(x: -size * 0.3)
-            Circle().fill(Palette.peach).frame(width: size, height: size).offset(x: size * 0.3)
-            Circle().fill(Palette.mintStrong).frame(width: size, height: size).offset(x: size * 0.3)
-                .mask(Circle().frame(width: size, height: size).offset(x: -size * 0.3))
+        let k = size / 96
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 21.6 * k, style: .continuous).fill(Palette.lavender)
+            Circle().fill(Palette.lavenderStrong).frame(width: 40 * k, height: 40 * k)
+                .offset(x: (17.6 - spread) * k, y: 30.4 * k)
+            Circle().fill(Color(light: 0x7FD1AE, dark: 0x7FD1AE).opacity(0.92)).frame(width: 40 * k, height: 40 * k)
+                .offset(x: (40 + spread) * k, y: 24 * k)
+            Circle().fill(.white).frame(width: 9.6 * k, height: 9.6 * k)
+                .scaleEffect(spark)
+                .offset(x: 65.6 * k, y: 17.6 * k)
         }
-        .frame(width: size * 1.6, height: size)
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 21.6 * k, style: .continuous))
         .accessibilityHidden(true)
     }
 }
@@ -129,7 +162,10 @@ struct NudgeBannerOverlay: View {
             if let nudge = app.nudges.banner {
                 NudgeBanner(nudge: nudge, me: app.session.me?.user.publicUser)
                     .padding(.horizontal, Space.s)
-                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                    // Drops in on the standard spring; leaves up and out with a 0.3 s ease-in.
+                    .transition(reduceMotion ? .opacity : .asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity).animation(.easeIn(duration: Motion.Durations.banner))))
                     .zIndex(1)
             }
         }
@@ -148,9 +184,12 @@ struct ToastOverlay: View {
                     Task { await app.nudges.undoLess() }
                 }
                 .padding(.bottom, 88)
-                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                // Figma M15c: rises 24 pt on the standard spring, holds 4 s, fades out over 0.2 s.
+                .transition(.asymmetric(
+                    insertion: reduceMotion ? .opacity : .offset(y: 24).combined(with: .opacity),
+                    removal: .opacity.animation(.easeOut(duration: Motion.Durations.fade))))
                 .task(id: toast.id) {
-                    try? await Task.sleep(for: .seconds(5))
+                    try? await Task.sleep(for: .seconds(4))
                     if app.nudges.toast?.id == toast.id { app.nudges.toast = nil }
                 }
             }

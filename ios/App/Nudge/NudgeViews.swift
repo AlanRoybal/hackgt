@@ -16,7 +16,11 @@ struct NudgeBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             HStack(alignment: .center, spacing: Space.s) {
-                AvatarPair(me: me, friend: nudge.friend, friendName: nudge.friendName, size: 40)
+                // Figma M15a: the two avatars nudge together 8 pt (pop spring) as the banner lands.
+                MotionTimeline(settlesAt: 1) { beat in
+                    AvatarPair(me: me, friend: nudge.friend, friendName: nudge.friendName, size: 40,
+                               spread: beat.reduceMotion ? 0 : 8 * (1 - Motion.Curve.spring(Motion.Springs.pop, beat.t, from: 0.2)))
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(nudge.title).font(.headline).foregroundStyle(Palette.ink).lineLimit(2)
                     Text(windowLine).font(.footnote.weight(.medium)).foregroundStyle(Palette.mintStrong)
@@ -75,24 +79,32 @@ struct NudgeBanner: View {
 struct WaitingRoomView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
 
     var body: some View {
         if let nudge = app.nudges.waiting {
             let outcome = Outcome(nudge)
             FitOrScroll { VStack(spacing: Space.l) {
                 Spacer()
-                ZStack {
-                    if outcome == .waiting && !reduceMotion {
-                        Circle().fill(Palette.mint).frame(width: 220, height: 220)
-                            .scaleEffect(pulse ? 1.12 : 0.9).opacity(pulse ? 0 : 0.8)
-                            .animation(.easeOut(duration: 1.8).repeatForever(autoreverses: false), value: pulse)
+                // Figma M16a: two rings expand 80 → 120% while fading, every 1.6 s, half a cycle apart; the avatars
+                // breathe 103% in opposite phase (3.2 s). Reduced Motion: rings static at rest.
+                MotionTimeline(settlesAt: 0, loops: outcome == .waiting) { beat in
+                    let live = outcome == .waiting && !beat.reduceMotion
+                    ZStack {
+                        if outcome == .waiting {
+                            ForEach(0..<2, id: \.self) { i in
+                                let ring = live ? Self.ring(beat.t, offset: Double(i) * Motion.Period.pulse / 2) : (scale: 0.8, opacity: 1)
+                                Circle().fill(Palette.mint).frame(width: 240, height: 240)
+                                    .scaleEffect(ring.scale).opacity(ring.opacity * 0.8)
+                            }
+                        }
+                        Circle().fill(outcome == .waiting ? Palette.mint : Palette.surfaceAlt).frame(width: 180, height: 180)
+                        AvatarPair(me: app.session.me?.user.publicUser, friend: nudge.friend, friendName: nudge.friendName, size: 72,
+                                   borderColor: outcome == .waiting ? Palette.mint : Palette.surfaceAlt,
+                                   leftScale: live ? IdleMotion.breathe(beat.t + 1.6, from: 0, period: 3.2, peak: 1.03) : 1,
+                                   rightScale: live ? IdleMotion.breathe(beat.t, from: 0, period: 3.2, peak: 1.03) : 1)
                     }
-                    Circle().fill(outcome == .waiting ? Palette.mint : Palette.surfaceAlt).frame(width: 180, height: 180)
-                    AvatarPair(me: app.session.me?.user.publicUser, friend: nudge.friend, friendName: nudge.friendName, size: 72,
-                               borderColor: outcome == .waiting ? Palette.mint : Palette.surfaceAlt)
+                    .frame(width: 290, height: 290)
                 }
-                .onAppear { pulse = true }
 
                 VStack(spacing: Space.s) {
                     Text(outcome.title(nudge.friendName)).font(Typography.largeTitle).displayTracking()
@@ -140,6 +152,13 @@ struct WaitingRoomView: View {
         } else {
             Palette.bg.ignoresSafeArea()
         }
+    }
+
+    /// One ring's scale and opacity `offset` seconds into its 1.6 s cycle.
+    static func ring(_ t: Double, offset: Double) -> (scale: Double, opacity: Double) {
+        let period = Motion.Period.pulse
+        let p = Motion.Curve.outCubic(((t + offset).truncatingRemainder(dividingBy: period)) / period)
+        return (0.8 + 0.4 * p, 1 - p)
     }
 
     var followUp: Message? {
