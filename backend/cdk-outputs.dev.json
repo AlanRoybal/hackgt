@@ -1,0 +1,14 @@
+{
+  "Nudge-dev": {
+    "UserPoolClientId": "2tkdgrqlbrs3vrfjqvo4k776rb",
+    "VectorBucketName": "nudge-vectors-dev-724772092774",
+    "TableName": "Nudge-dev",
+    "UserPoolId": "us-east-1_FOSgjtqj2",
+    "Stage": "dev",
+    "Region": "us-east-1",
+    "IdentityPoolId": "us-east-1:b9309c38-a36c-4199-816c-0907862428e9",
+    "MediaBucket": "nudge-media-dev-724772092774",
+    "WsUrl": "wss://a0ngqoooq6.execute-api.us-east-1.amazonaws.com/dev",
+    "HttpApiUrl": "https://2pe0i2c1kg.execute-api.us-east-1.amazonaws.com"
+  }
+}

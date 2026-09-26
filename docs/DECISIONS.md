@@ -60,3 +60,27 @@ Newest at the bottom. Each entry: decision, why, consequence.
 **D-208 Screenshot mode.** `-screenshotScreen <id>` (DEBUG) renders any screen with in-memory mock data via each store's `preview(...)` method. `-forceReduceMotion` sets `_accessibilityReduceMotion` for the Reduce Motion capture, because the simulator's accessibility setting only takes effect after a respring. Camera frames and photos in captures are flat illustrations, not real video.
 
 **D-209 XcodeGen.** Use Homebrew `xcodegen` ≥ 2.46. The copy at `~/.local/bin/xcodegen` ships without its SettingPresets, so extensions end up with no `PRODUCT_NAME`. `ios/scripts/screenshots.sh` prefers `/opt/homebrew/bin/xcodegen`.
+
+## Backend workstream (D-100+)
+
+**D-100 One shared Lambda role.** All backend Lambdas share one IAM role (table, bucket, queues, Bedrock models, Rekognition, Chime, Cognito admin on the pool, S3 Vectors on the one bucket, SSM `/nudge/<stage>/*`, WS ManageConnections). Simpler to reason about for a small app; split per function before any public launch.
+
+**D-101 Bundle the AWS SDK into every Lambda.** `externalModules: []` — the Node 22 runtime's built-in SDK may predate `@aws-sdk/client-s3vectors`. Bundles are 0.3–0.8 MB; cold starts stay well under a second.
+
+**D-102 Reservation via `busyUntil`.** A user is "busy" (not nudgeable) while `busyUntil > now`: set to pre-check + 180 s + slack when a nudge is created, and to +3 h when a call starts; cleared on terminal states / call end. Abandoned calls can't block nudges for more than 3 h.
+
+**D-103 Dev push log.** In `dev`, every push (alert/background/voip) is also written to `PUSHLOG#<userId>` (24 h TTL) so integration tests can assert on pushes without a real APNs key. Without the SSM key, pushes are only logged.
+
+**D-104 Retrieval eval photos from Openverse, not Nova Canvas.** Nova Canvas is LEGACY in this account ("not actively used in the last 30 days") and no other first-party image model is ACTIVE. The 60 eval photos are CC0 / public-domain images from Openverse (credits in `evals/retrieval/CREDITS.json`); queries were relabeled by eye to describe what each downloaded photo shows.
+
+**D-105 Image-only embeddings, threshold 0.37.** In `evals/retrieval`, Titan image-only embeddings scored top-1 1.00 / top-3 1.00 vs 0.95 / 0.97 when fused with the Nova caption. Production embeds the image alone; the caption is kept as non-filterable vector metadata. Similarity threshold 0.37 (positives' min 0.379, negatives' max 0.373 — a thin margin, so it leans toward recall; "Ask first" makes a stray suggestion cheap to dismiss).
+
+**D-106 Chime live transcription as a fallback transcript source.** On match, the backend calls `StartMeetingTranscription` (Amazon Transcribe engine, en-US). If a device can't run its own Transcribe stream alongside Chime's audio session, iOS forwards its **own** attendee's lines from Chime's transcript events over WS `transcript` exactly like SPEC §3.8; the identity-pool direct-Transcribe path stays. Needs the `AWSServiceRoleForAmazonChimeTranscription` service-linked role (created once with `aws iam create-service-linked-role --aws-service-name transcription.chime.amazonaws.com`; free). Cost note: this transcribes every call even when devices use their own stream (billed at Transcribe streaming rates, credit-covered); set `MEETING_TRANSCRIPTION=off` to disable.
+
+**D-107 Match notification never rings the accepter.** The user whose accept completes the match always gets WS `call.matched` (plus `callId` in the respond response) and never a VoIP push — the app is open by definition and its `waiting` message may land after the accept. Only the other participant, if not in the waiting room, gets the VoIP push.
+
+**D-108 Detector judges only the newest line.** The prompt shows earlier lines as "context only" and the just-received segment separately as "LAST LINE"; the server always puts the current segment last even if the friend's segment arrived after it. Without this, earlier references in the same minute leaked into later queries (found by integration test; 8 context cases added to the eval).
+
+**D-109 Summaries keep topics without dates.** Every extracted topic is stored `open`; only topics with `followUpAfter` can drive follow-up nudges.
+
+**D-110 Consumers drop messages for deleted records.** Delay / summarize SQS consumers treat 404 (nudge or call deleted with an account) and 409 (already handled) as done instead of retrying into the DLQ.

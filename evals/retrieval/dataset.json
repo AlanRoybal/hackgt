@@ -1,0 +1,328 @@
+{
+  "note": "Photos are CC0/public-domain from Openverse (see CREDITS.json). Queries describe what each photo actually shows, phrased the way the reference detector would output them; they were relabeled after checking contact-sheet.jpg. `negatives` have no matching image and are used to tune the similarity threshold.",
+  "images": [
+    {
+      "id": "dog-beach",
+      "prompt": "smartphone photo of a golden retriever running on a sandy beach with waves, sunny day",
+      "query": "my dog running on the beach"
+    },
+    {
+      "id": "dog-couch",
+      "prompt": "smartphone photo of a golden retriever puppy sleeping on a grey couch indoors",
+      "query": "the puppy on the couch",
+      "search": "puppy sofa"
+    },
+    {
+      "id": "cat-window",
+      "prompt": "smartphone photo of a tabby cat sitting on a windowsill looking outside",
+      "query": "my cat sitting in the window"
+    },
+    {
+      "id": "hike-lake",
+      "prompt": "smartphone photo from a mountain hiking trail overlooking a turquoise alpine lake, pine trees",
+      "query": "the waterfall in the slot canyon"
+    },
+    {
+      "id": "hike-desert",
+      "prompt": "smartphone photo of a desert canyon hiking trail with red rock formations under blue sky",
+      "query": "hiking in the red rock canyon"
+    },
+    {
+      "id": "sunset-city",
+      "prompt": "smartphone photo of a sunset over a city skyline from a rooftop, orange sky",
+      "query": "everyone taking photos at the overlook at dusk"
+    },
+    {
+      "id": "sunset-ocean",
+      "prompt": "smartphone photo of a sunset over the ocean with a pier silhouette",
+      "query": "the long pier under the cloudy sky"
+    },
+    {
+      "id": "cake-birthday",
+      "prompt": "smartphone photo of a homemade chocolate birthday cake with lit candles on a kitchen table",
+      "query": "the chocolate birthday cake I made"
+    },
+    {
+      "id": "cake-strawberry",
+      "prompt": "smartphone photo of a strawberry shortcake with whipped cream on a plate in a cafe",
+      "query": "the strawberry cake",
+      "search": "strawberry cake"
+    },
+    {
+      "id": "lasagna",
+      "prompt": "smartphone photo of a homemade lasagna in a baking dish fresh out of the oven",
+      "query": "homemade lasagna"
+    },
+    {
+      "id": "ramen",
+      "prompt": "smartphone photo of a bowl of tonkotsu ramen with egg and pork at a restaurant",
+      "query": "the street with all the little shops in Japan"
+    },
+    {
+      "id": "sushi",
+      "prompt": "smartphone photo of a sushi platter with nigiri and rolls on a wooden board",
+      "query": "the salmon sushi platter"
+    },
+    {
+      "id": "pancakes",
+      "prompt": "smartphone photo of a stack of blueberry pancakes with syrup at a diner breakfast",
+      "query": "the diner table with all the sauces"
+    },
+    {
+      "id": "coffee-latte",
+      "prompt": "smartphone photo of a latte with heart latte art on a marble cafe table",
+      "query": "the latte art at the coffee shop"
+    },
+    {
+      "id": "pizza",
+      "prompt": "smartphone photo of a neapolitan margherita pizza in a wood fired pizzeria",
+      "query": "that margherita pizza"
+    },
+    {
+      "id": "tacos",
+      "prompt": "smartphone photo of three street tacos with cilantro and lime on a paper plate from a food truck",
+      "query": "the grilled steak plate with lime"
+    },
+    {
+      "id": "new-car",
+      "prompt": "smartphone photo of a shiny new blue hatchback car parked in a driveway",
+      "query": "the rusty old blue car"
+    },
+    {
+      "id": "bike",
+      "prompt": "smartphone photo of a red road bicycle leaning against a brick wall",
+      "query": "me cycling in my bike gear"
+    },
+    {
+      "id": "sneakers",
+      "prompt": "smartphone photo of new white sneakers on feet on a sidewalk, top down view",
+      "query": "the sneaker someone turned into a planter"
+    },
+    {
+      "id": "haircut",
+      "prompt": "smartphone selfie style photo of a person's new short haircut from behind in a barbershop mirror",
+      "query": "getting my haircut at the barber"
+    },
+    {
+      "id": "concert",
+      "prompt": "smartphone photo from the crowd at a concert with stage lights and a band on stage",
+      "query": "the old theater marquee"
+    },
+    {
+      "id": "baseball",
+      "prompt": "smartphone photo from the stands of a baseball stadium during a game, green field",
+      "query": "the old black and white baseball photo"
+    },
+    {
+      "id": "basketball",
+      "prompt": "smartphone photo of a kids basketball game in a school gym",
+      "query": "the old gym with the basketball hoops"
+    },
+    {
+      "id": "graduation",
+      "prompt": "smartphone photo of graduation caps being thrown in the air outdoors at a university",
+      "query": "the Air Force Academy stadium crowd"
+    },
+    {
+      "id": "wedding",
+      "prompt": "smartphone photo of a wedding reception with string lights and round tables in a barn",
+      "query": "the Empire State Building lit up at night"
+    },
+    {
+      "id": "snow-cabin",
+      "prompt": "smartphone photo of a wooden cabin covered in snow with pine trees in winter",
+      "query": "the pencil sketch of the log cabin",
+      "search": "cabin snow"
+    },
+    {
+      "id": "ski",
+      "prompt": "smartphone photo of a ski slope with skiers and a chairlift on a sunny day",
+      "query": "the caution sign"
+    },
+    {
+      "id": "camping-tent",
+      "prompt": "smartphone photo of a tent at a campsite with a campfire at dusk in the forest",
+      "query": "planning the route on the map"
+    },
+    {
+      "id": "garden-tomatoes",
+      "prompt": "smartphone photo of ripe tomatoes growing in a backyard vegetable garden",
+      "query": "the tomatoes in my garden"
+    },
+    {
+      "id": "flowers-tulips",
+      "prompt": "smartphone photo of a bouquet of pink tulips in a glass vase on a table",
+      "query": "the red and yellow tulip"
+    },
+    {
+      "id": "museum-dino",
+      "prompt": "smartphone photo of a dinosaur skeleton in a natural history museum hall",
+      "query": "the lego dinosaur"
+    },
+    {
+      "id": "aquarium",
+      "prompt": "smartphone photo of a large aquarium tank with jellyfish glowing blue",
+      "query": "the jellyfish at the aquarium"
+    },
+    {
+      "id": "eiffel",
+      "prompt": "smartphone photo of the Eiffel Tower in Paris on a clear day",
+      "query": "the Eiffel Tower in Paris"
+    },
+    {
+      "id": "golden-gate",
+      "prompt": "smartphone photo of the Golden Gate Bridge in fog from a viewpoint",
+      "query": "the Golden Gate Bridge"
+    },
+    {
+      "id": "times-square",
+      "prompt": "smartphone photo of Times Square at night with bright billboards and crowds",
+      "query": "the vintage New York postcard"
+    },
+    {
+      "id": "farmers-market",
+      "prompt": "smartphone photo of a farmers market stall with fresh vegetables and fruit crates",
+      "query": "the farmers market poster"
+    },
+    {
+      "id": "bookshelf",
+      "prompt": "smartphone photo of a new wooden bookshelf filled with books in a living room",
+      "query": "hanging out on the couch with the guys"
+    },
+    {
+      "id": "desk-setup",
+      "prompt": "smartphone photo of a home office desk setup with two monitors and a mechanical keyboard",
+      "query": "my laptop on the desk"
+    },
+    {
+      "id": "lego",
+      "prompt": "smartphone photo of a large finished lego castle set on a table",
+      "query": "the red lego ball",
+      "search": "lego"
+    },
+    {
+      "id": "painting",
+      "prompt": "smartphone photo of an acrylic painting of mountains on an easel",
+      "query": "the hazy golden sky"
+    },
+    {
+      "id": "knitting",
+      "prompt": "smartphone photo of a hand knitted green scarf with knitting needles",
+      "query": "the scarf I knitted"
+    },
+    {
+      "id": "baby",
+      "prompt": "smartphone photo of tiny baby feet on a white blanket",
+      "query": "the baby with the chocolate cupcake"
+    },
+    {
+      "id": "grandparents",
+      "prompt": "smartphone photo of an elderly couple smiling on a porch swing",
+      "query": "the old family portrait"
+    },
+    {
+      "id": "friends-picnic",
+      "prompt": "smartphone photo of friends having a picnic on a blanket in a park",
+      "query": "the yellow tree in the park"
+    },
+    {
+      "id": "rainbow",
+      "prompt": "smartphone photo of a double rainbow over green fields after rain",
+      "query": "the double rainbow"
+    },
+    {
+      "id": "thunderstorm",
+      "prompt": "smartphone photo of dark thunderstorm clouds with lightning over a town",
+      "query": "the storm clouds over the river"
+    },
+    {
+      "id": "fall-leaves",
+      "prompt": "smartphone photo of a street covered in orange and red fall leaves",
+      "query": "the willow trees by the pond"
+    },
+    {
+      "id": "pumpkins",
+      "prompt": "smartphone photo of a pumpkin patch with many orange pumpkins",
+      "query": "the snowy mountain behind the farm fields"
+    },
+    {
+      "id": "christmas-tree",
+      "prompt": "smartphone photo of a decorated christmas tree with lights in a living room",
+      "query": "carrying in the christmas tree"
+    },
+    {
+      "id": "fireworks",
+      "prompt": "smartphone photo of colorful fireworks over a river at night",
+      "query": "the monorail by the water"
+    },
+    {
+      "id": "kitchen-reno",
+      "prompt": "smartphone photo of a newly renovated kitchen with white cabinets and wood counters",
+      "query": "the textured ceiling"
+    },
+    {
+      "id": "apartment-keys",
+      "prompt": "smartphone photo of a hand holding keys in front of an empty new apartment",
+      "query": "the empty bedroom in the new apartment"
+    },
+    {
+      "id": "moving-boxes",
+      "prompt": "smartphone photo of stacked cardboard moving boxes in an empty room",
+      "query": "all the moving boxes in the kitchen"
+    },
+    {
+      "id": "fish-caught",
+      "prompt": "smartphone photo of a person holding a large trout they caught by a river",
+      "query": "the old photo of the fishing boat"
+    },
+    {
+      "id": "kayak",
+      "prompt": "smartphone photo from a kayak on a calm lake, bow of the kayak visible",
+      "query": "kayaking on the lake"
+    },
+    {
+      "id": "surf",
+      "prompt": "smartphone photo of a surfer riding a wave at the beach",
+      "query": "the beach and coastline from above"
+    },
+    {
+      "id": "science-fair",
+      "prompt": "smartphone photo of a school science fair project volcano model on a table",
+      "query": "the white car on the desert hill",
+      "search": "volcano model"
+    },
+    {
+      "id": "physics-notes",
+      "prompt": "smartphone photo of a whiteboard covered in physics equations and diagrams",
+      "query": "the ABC chalkboard drawing",
+      "search": "blackboard math"
+    },
+    {
+      "id": "piano-recital",
+      "prompt": "smartphone photo of a child playing a grand piano on a small stage at a recital",
+      "query": "playing the grand piano"
+    },
+    {
+      "id": "horse",
+      "prompt": "smartphone photo of a brown horse in a fenced pasture on a farm",
+      "query": "the husky puppy"
+    }
+  ],
+  "negatives": [
+    "my new motorcycle",
+    "the parrot I adopted",
+    "the volleyball tournament",
+    "the ice cream sundae",
+    "the snowman we built",
+    "my tattoo",
+    "the cruise ship",
+    "the hot air balloons",
+    "the tennis match",
+    "the bowling alley",
+    "my new glasses",
+    "the zoo elephants",
+    "the pottery class vase",
+    "the hospital visit",
+    "the chess tournament"
+  ]
+}
