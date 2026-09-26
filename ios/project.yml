@@ -1,0 +1,148 @@
+name: Nudge
+options:
+  bundleIdPrefix: app.nudge
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+packages:
+  NudgeKit:
+    path: Packages/NudgeKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.1.0"
+targets:
+  Nudge:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: NudgeKit
+        product: NudgeKit
+      - target: NudgeNotificationContent
+        embed: true
+      - target: NudgeNotificationService
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NUDGE_BUNDLE_ID)
+        PRODUCT_NAME: Nudge
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/Nudge.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Nudge
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSupportsIndirectInputEvents: true
+        UIBackgroundModes: [remote-notification, voip, audio, fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [app.nudge.refresh, app.nudge.photos]
+        CFBundleURLTypes:
+          - CFBundleURLName: app.nudge.add
+            CFBundleURLSchemes: [nudge]
+        NSCalendarsFullAccessUsageDescription: "Nudge checks when you're busy so it can tell when you and a friend are both free. Only busy times are shared, never event names."
+        NSPhotoLibraryUsageDescription: "Nudge analyzes photos from the last 30 days so the ones you mention on a call can appear. Only photos you choose to show are sent to your friend."
+        NSContactsUsageDescription: "Nudge checks which of your contacts use Nudge. Numbers are scrambled on your phone before anything is sent."
+        NSCameraUsageDescription: "Your camera is used for video calls."
+        NSMicrophoneUsageDescription: "Your microphone is used for calls, and to find photos you mention."
+        NSMotionUsageDescription: "Nudge won't nudge you while you're driving."
+        NSFocusStatusUsageDescription: "Nudge won't nudge you while a Focus is on."
+        NudgeAPIBaseURL: $(NUDGE_API_BASE_URL)
+        NudgeWebSocketURL: $(NUDGE_WS_URL)
+        NudgeAppGroup: group.$(NUDGE_BUNDLE_ID)
+    entitlements:
+      path: App/Nudge.entitlements
+      properties:
+        aps-environment: $(NUDGE_APS_ENVIRONMENT)
+        com.apple.developer.applesignin: [Default]
+        com.apple.developer.usernotifications.communication: true
+        com.apple.security.application-groups: [group.$(NUDGE_BUNDLE_ID)]
+  NudgeNotificationContent:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/NotificationContent
+    dependencies:
+      - package: NudgeKit
+        product: NudgeExtensionKit
+      - sdk: UserNotificationsUI.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NUDGE_BUNDLE_ID).NotificationContent
+        INFOPLIST_FILE: Extensions/NotificationContent/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extensions/NotificationContent/NotificationContent.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Extensions/NotificationContent/Info.plist
+      properties:
+        CFBundleDisplayName: Nudge
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.content-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationViewController
+          NSExtensionAttributes:
+            UNNotificationExtensionCategory: NUDGE
+            UNNotificationExtensionInitialContentSizeRatio: 0.42
+            UNNotificationExtensionDefaultContentHidden: false
+            UNNotificationExtensionUserInteractionEnabled: false
+    entitlements:
+      path: Extensions/NotificationContent/NotificationContent.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(NUDGE_BUNDLE_ID)]
+  NudgeNotificationService:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/NotificationService
+    dependencies:
+      - package: NudgeKit
+        product: NudgeExtensionKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NUDGE_BUNDLE_ID).NotificationService
+        INFOPLIST_FILE: Extensions/NotificationService/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extensions/NotificationService/NotificationService.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Extensions/NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Nudge
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    entitlements:
+      path: Extensions/NotificationService/NotificationService.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(NUDGE_BUNDLE_ID)]
+schemes:
+  Nudge:
+    build:
+      targets:
+        Nudge: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    archive:
+      config: Release

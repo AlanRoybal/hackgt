@@ -33,3 +33,30 @@ Newest at the bottom. Each entry: decision, why, consequence.
 **D-15 Legal.** No in-call indicator; consent comes from the ToS accepted at first sign-in, which explicitly covers transcription of both participants. **A lawyer should review the ToS before any public launch** (two-party consent laws, biometric/photo analysis laws such as BIPA).
 
 **D-16 Minimum iOS 18.** Built with Xcode 26.5 / iOS 26 SDK. On iOS 26 the system tab bar and nav bar pick up Liquid Glass automatically; per the brief, system chrome stays standard and only content is flat pastel.
+
+## iOS (D-200+)
+
+**D-200 Module renamed `BackgroundTasks` → `BackgroundWork`.** A local module named `BackgroundTasks` shadows Apple's framework of the same name, so the scheduler couldn't import it.
+
+**D-201 Contrast-adjusted tokens.** Appendix A's light-mode *Strong* colors measure 3.4–4.0:1 on their own pastel fills, below WCAG AA (4.5:1). They were darkened the minimum amount (`ios/scripts/contrast.py`): lavenderStrong #6052BD, mintStrong #277553, peachStrong #9F5130, skyStrong #3569A5, butterStrong #83680F, roseStrong #B13647. inkTertiary is #6D727C light / #828796 dark (was 2.5:1 / 3.5:1). Fills, dark-mode Strong colors and names are unchanged. **The Figma file (Devin) should adopt these values.**
+
+**D-202 Transcription without the AWS SDK, plus a Chime fallback.** Own-mic transcription uses AVAudioEngine → 16 kHz PCM → SigV4-presigned Transcribe WebSocket (D-5). Chime's audio unit and an AVAudioEngine input tap may not coexist on every device, which can't be verified on the simulator. Fallback: if the own stream isn't running and the meeting has Chime live transcription (`StartMeetingTranscription`) turned on, the client forwards its *own* final segments from Chime's transcript events over the same WS `transcript` action. The backend would need to call `StartMeetingTranscription` at match time for the fallback to activate; that's a contract question for the lead.
+
+**D-203 Photo-share reducer.** `PhotoShareSession` is a pure state machine (event + time → effects), driven by `PhotoShareController`. It matches the peer-bot semantics:
+- an in-flight `createShare` blocks further offers and counts toward the max-5 queue
+- `durationMs` is fixed at offer time from the number of pending items (including the one being offered)
+- messages echoed from self are ignored
+- on `createShare` failure it logs and moves to the next item
+- stale messages (older Chime `timestampMs` from the same sender) are dropped
+
+**D-204 Swipe-away = fling off-screen.** The mini window is draggable to corners, so "swipe my photo away" is a fling whose projected end point leaves the screen horizontally. It cancels the photo and the window still snaps to the nearest corner.
+
+**D-205 One full-screen cover for the waiting room → call → summary.** A single `fullScreenCover` switches content internally, so the transitions don't stack or re-present modals.
+
+**D-206 No location permission.** Reverse geocoding uses each photo's own EXIF location with `CLGeocoder`, which needs no Core Location authorization. Results are cached per ~1 km cell because the geocoder is rate-limited.
+
+**D-207 Nudge notification actions.** `ACCEPT` is a foreground action (opens the waiting room). `SKIP` and `LESS` run in the background: iOS launches the app to call the API, even after termination. Swiping the notification away sends no response; the nudge just expires, per SPEC.
+
+**D-208 Screenshot mode.** `-screenshotScreen <id>` (DEBUG) renders any screen with in-memory mock data via each store's `preview(...)` method. `-forceReduceMotion` sets `_accessibilityReduceMotion` for the Reduce Motion capture, because the simulator's accessibility setting only takes effect after a respring. Camera frames and photos in captures are flat illustrations, not real video.
+
+**D-209 XcodeGen.** Use Homebrew `xcodegen` ≥ 2.46. The copy at `~/.local/bin/xcodegen` ships without its SettingPresets, so extensions end up with no `PRODUCT_NAME`. `ios/scripts/screenshots.sh` prefers `/opt/homebrew/bin/xcodegen`.
