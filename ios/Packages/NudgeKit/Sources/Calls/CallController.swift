@@ -30,6 +30,7 @@ public final class CallController {
     public private(set) var hasRemoteVideo = false
     public private(set) var hasLocalVideo = false
     public var suggestion: PhotoSuggestion?
+    public private(set) var queuedSuggestions: [PhotoSuggestion] = []
     /// Automatic mode: "Showing to Mom · Hide" for 2 s.
     public private(set) var autoShown: PhotoSuggestion?
     public var error: String?
@@ -49,11 +50,20 @@ public final class CallController {
     private var localTileId: Int?
     private var remoteTileId: Int?
     private var transcriber: TranscribeStreamClient?
+    fileprivate var sessionGeneration = UUID()
+    private var audioStartTask: Task<Void, Error>?
+    private var audioStartReturned = false
+    private var audioConnected = false
+    private var pendingMuteChange = false
+    private var muteRestoreTask: Task<Void, Never>?
+    private var ending = false
+    private var transcriptEpoch = 0
     private var mic: MicCapture?
     private var transcriptTask: Task<Void, Never>?
     private var transcriptBatcher: TranscriptBatcher?
     private var ownTranscribeRunning = false
     private var suggestionTimer: Task<Void, Never>?
+    private var autoShownTimer: Task<Void, Never>?
     private let log = Logger(subsystem: "app.nudge", category: "call")
 
     public var onEnded: ((_ callId: String, _ durationSec: Int) -> Void)?
@@ -78,7 +88,12 @@ public final class CallController {
     // MARK: Join / leave
 
     public func join(callId: String, viaCallKit: Bool) async {
-        guard self.callId != callId || phase == .ended || phase == .idle else { return }
+        guard !ending, !isActive else { return }
+        sessionGeneration = UUID()
+        let generation = sessionGeneration
+        audioStartReturned = false
+        audioConnected = false
+        pendingMuteChange = false
         self.callId = callId
         phase = .connecting
         startedAt = nil
@@ -88,20 +103,22 @@ public final class CallController {
         guard await Self.ensureMicrophone() else {
             log.error("join blocked: microphone permission denied")
             self.error = "Nudge needs the microphone for calls. Turn it on in Settings."
-            phase = .ended
+            await leave()
             return
         }
+        guard sessionGeneration == generation, isActive else { return }
         let camera = await Self.ensureCamera() // camera off is fine; the call continues audio-only
         log.notice("join: permissions ok, camera=\(camera, privacy: .public)")
         do {
             let join = try await api.join(callId: callId)
+            guard sessionGeneration == generation, isActive else { return }
             peer = join.peer
             peerName = join.peerName
             peerAttendeeId = join.peerAttendeeId
             let config = try ChimeConfig.make(meeting: join.meeting, attendee: join.attendee)
             let session = DefaultMeetingSession(configuration: config, logger: ConsoleLogger(name: "Chime", level: .ERROR))
             self.session = session
-            let bridge = ChimeBridge(owner: self)
+            let bridge = ChimeBridge(owner: self, generation: generation)
             self.bridge = bridge
             session.audioVideo.addAudioVideoObserver(observer: bridge)
             session.audioVideo.addVideoTileObserver(observer: bridge)
@@ -118,19 +135,26 @@ public final class CallController {
             let avConfig = AudioVideoConfiguration(callKitEnabled: viaCallKit)
             #endif
             let configBox = UncheckedSendable(avConfig)
-            try await Task.detached(priority: .userInitiated) {
+            let startup = Task.detached(priority: .userInitiated) {
                 try box.value.start(audioVideoConfiguration: configBox.value)
-            }.value
+            }
+            audioStartTask = startup
+            try await startup.value
             log.notice("join: Chime start returned")
+            guard sessionGeneration == generation, isActive else { return }
+            audioStartTask = nil
+            audioStartReturned = true
+            restoreMuteWhenReady()
             routeAudioToSpeaker()
             try? session.audioVideo.startLocalVideo()
             session.audioVideo.startRemoteVideo()
             setUpPhotos(callId: callId)
             await startTranscription(callId: callId)
         } catch {
+            guard sessionGeneration == generation, isActive else { return }
             log.error("join failed: \(String(describing: error), privacy: .public)")
             self.error = "Couldn't connect the call."
-            phase = .ended
+            await leave()
         }
     }
 
@@ -150,29 +174,30 @@ public final class CallController {
         }
     }
 
-    public func leave() async {
-        guard let callId, phase != .ended else { return }
-        await teardown()
-        try? await api.endCall(callId)
-        onEnded?(callId, durationSec)
-    }
+    public func leave() async { await finishCall(notifyServer: true) }
 
-    /// The other side ended (WS `call.ended` or Chime session stopped).
-    public func remoteEnded() async {
-        guard let callId, phase != .ended else { return }
-        await teardown()
-        onEnded?(callId, durationSec)
-    }
+    /// Only a server/peer end event uses this path; local errors must end the shared call too.
+    public func remoteEnded() async { await finishCall(notifyServer: false) }
 
-    private func teardown() async {
+    private func finishCall(notifyServer: Bool) async {
+        guard let callId, !ending, phase != .ended else { return }
+        ending = true
         endedAt = Date()
-        phase = .ended
-        suggestion = nil
-        autoShown = nil
-        photos?.reset()
-        try? FileManager.default.removeItem(at: Self.clipDirectory)
-        await stopTranscription()
+        let duration = durationSec
+        // Invalidate queued SDK callbacks and pending join continuations before stopping audio.
+        sessionGeneration = UUID()
+        muteRestoreTask?.cancel()
+        muteRestoreTask = nil
+        audioConnected = false
+        audioStartReturned = false
+        transcriber?.muteGate.setMuted(true)
+        mic?.stop()
+        mic = nil
+        let stoppingSession = session
+        let startup = audioStartTask
+        audioStartTask = nil
         if let session {
+            _ = session.audioVideo.realtimeLocalMute()
             session.audioVideo.stopLocalVideo()
             session.audioVideo.stopRemoteVideo()
             session.audioVideo.stop()
@@ -181,17 +206,76 @@ public final class CallController {
         bridge = nil
         localTileId = nil
         remoteTileId = nil
+        phase = .ended
+        clearSuggestions()
+        autoShown = nil
+        autoShownTimer?.cancel()
+        photos?.reset()
+        try? FileManager.default.removeItem(at: Self.clipDirectory)
+        // End the server meeting concurrently with transcription cleanup, not after it.
+        async let serverEnd: Void = notifyServer ? endServerCall(callId) : ()
+        await stopTranscription()
+        // If stop raced start(), the SDK may have ignored stop while still initializing.
+        // Do not permit a replacement call until that startup has finished and been stopped.
+        if let startup {
+            _ = try? await startup.value
+            stoppingSession?.audioVideo.stop()
+        }
+        await serverEnd
+        ending = false
+        onEnded?(callId, duration)
+    }
+
+    private func endServerCall(_ id: String) async {
+        do { try await api.endCall(id) }
+        catch { log.error("end call request failed: \(String(describing: error), privacy: .public)") }
     }
 
     // MARK: Controls
 
-    public func toggleMute() {
-        guard let av = session?.audioVideo else { isMuted.toggle(); return }
-        isMuted = isMuted ? !av.realtimeLocalUnmute() : av.realtimeLocalMute()
-    }
+    public func toggleMute() { setMuted(!isMuted) }
 
     public func setMuted(_ muted: Bool) {
-        if muted != isMuted { toggleMute() }
+        guard muted != isMuted else { return }
+        if audioStartReturned && audioConnected, let av = session?.audioVideo {
+            let success = muted ? av.realtimeLocalMute() : av.realtimeLocalUnmute()
+            guard success else {
+                error = muted ? "Couldn't mute the call. Please end it and try again." : "Couldn't unmute. Your microphone is still muted."
+                log.error("Call audio mute change failed")
+                return
+            }
+        }
+        pendingMuteChange = !(audioStartReturned && audioConnected)
+        isMuted = muted
+        transcriber?.muteGate.setMuted(muted)
+        transcriptEpoch += 1
+        let oldBatcher = transcriptBatcher
+        transcriptBatcher = nil
+        Task { await oldBatcher?.discard() }
+        if muted {
+            clearSuggestions()
+        }
+    }
+
+    /// Wait for both start() and the SDK's connected callback. Default unmuted audio needs no reset.
+    private func restoreMuteWhenReady() {
+        guard audioStartReturned, audioConnected, isActive, isMuted || pendingMuteChange else { return }
+        muteRestoreTask?.cancel()
+        let generation = sessionGeneration
+        muteRestoreTask = Task { [weak self] in
+            for attempt in 0..<3 {
+                guard let self, !Task.isCancelled, self.sessionGeneration == generation,
+                      self.isActive, self.isMuted || self.pendingMuteChange else { return }
+                let applied = self.isMuted ? self.session?.audioVideo.realtimeLocalMute() : self.session?.audioVideo.realtimeLocalUnmute()
+                if applied == true { self.pendingMuteChange = false; return }
+                self.log.notice("mute restore retry \(attempt + 1)")
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            }
+            guard let self, self.sessionGeneration == generation, self.isActive, self.isMuted || self.pendingMuteChange else { return }
+            self.error = "Couldn't restore mute. Ending the call."
+            self.muteRestoreTask = nil
+            await self.leave()
+        }
     }
 
     public func toggleCamera() {
@@ -247,36 +331,66 @@ public final class CallController {
         photos = PhotoShareController(selfId: me, dependencies: deps)
     }
 
-    /// A `photo.suggestion` event from the backend (only the speaker receives these).
+    /// Suggestions wait in arrival order; a new result never replaces an unanswered card.
     public func receive(suggestion s: PhotoSuggestion) {
-        guard s.callId == callId, photoMode != .off else { return }
-        // The server marks partial-transcript suggestions as manual even in auto mode.
-        if s.auto && photoMode == .auto {
+        guard isActive, s.callId == callId, photoMode != .off, !isMuted else { return }
+        guard suggestion?.photoId != s.photoId,
+              !queuedSuggestions.contains(where: { $0.photoId == s.photoId || $0.id == s.id }) else { return }
+        // Do not let an automatic result jump ahead of an outstanding manual decision.
+        if s.auto && photoMode == .auto && suggestion == nil && queuedSuggestions.isEmpty {
             showSuggestion(s)
             autoShown = s
-            suggestionTimer?.cancel()
-            suggestionTimer = Task {
+            autoShownTimer?.cancel()
+            autoShownTimer = Task {
                 try? await Task.sleep(for: .seconds(2))
                 if !Task.isCancelled { autoShown = nil }
             }
         } else {
-            suggestion = s
-            suggestionTimer?.cancel()
-            suggestionTimer = Task {
-                try? await Task.sleep(for: .seconds(8))
-                if !Task.isCancelled, suggestion?.id == s.id { suggestion = nil }
-            }
+            // Bound the wait below thumbnail URL expiry; preserve the active card and oldest requests.
+            guard queuedSuggestions.count < 10 else { return }
+            queuedSuggestions.append(s)
+            presentNextSuggestion()
         }
     }
 
+    private func presentNextSuggestion() {
+        guard suggestion == nil, !queuedSuggestions.isEmpty, isActive, !isMuted, photoMode != .off else { return }
+        let next = queuedSuggestions.removeFirst()
+        suggestion = next
+        suggestionTimer?.cancel()
+        suggestionTimer = Task {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            advanceSuggestion(expectedID: next.id)
+        }
+    }
+
+    /// Shared by actions and expiry. An old timer or double tap cannot consume the next card.
+    func advanceSuggestion(expectedID: String) {
+        guard suggestion?.id == expectedID else { return }
+        suggestionTimer?.cancel()
+        suggestionTimer = nil
+        suggestion = nil
+        presentNextSuggestion()
+    }
+
+    private func clearSuggestions() {
+        suggestionTimer?.cancel()
+        suggestionTimer = nil
+        suggestion = nil
+        queuedSuggestions.removeAll()
+    }
+
     public func showSuggestion(_ s: PhotoSuggestion) {
-        if suggestion?.id == s.id { suggestion = nil }
+        guard isActive, !isMuted, s.callId == callId,
+              suggestion?.id == s.id || (s.auto && photoMode == .auto && suggestion == nil) else { return }
         if s.isVideo, let videoUrl = s.videoUrl {
             photos?.share(OutgoingPhoto(photoId: s.photoId, suggestionId: s.suggestionId,
                                         image: .video(videoUrl, poster: s.thumbUrl), videoMs: s.durationMs))
         } else {
             photos?.share(OutgoingPhoto(photoId: s.photoId, suggestionId: s.suggestionId, image: .url(s.thumbUrl)))
         }
+        advanceSuggestion(expectedID: s.id)
     }
 
     /// Received clips live only for the call; `end` clears the folder.
@@ -293,7 +407,8 @@ public final class CallController {
     }
 
     public func dismissSuggestion(_ dismissed: PhotoSuggestion) {
-        if suggestion?.id == dismissed.id { suggestion = nil }
+        guard suggestion?.id == dismissed.id else { return }
+        advanceSuggestion(expectedID: dismissed.id)
         Task { try? await api.dismissSuggestion(callId: dismissed.callId, suggestionId: dismissed.suggestionId) }
     }
 
@@ -319,20 +434,27 @@ public final class CallController {
                 return try await cognito.credentials(idToken: token)
             }
             let stream = try await client.start()
+            guard self.callId == callId, isActive else { await client.stop(); return }
+            let gate = client.muteGate
+            gate.setMuted(isMuted)
             let mic = MicCapture()
-            try mic.start { chunk in Task { await client.send(pcm: chunk) } }
+            try mic.start { chunk in
+                // Filter at capture too: a queued chunk recorded while muted must stay silent after unmute.
+                let pcm = gate.filter(chunk)
+                Task { await client.send(pcm: pcm) }
+            }
             self.mic = mic
             self.transcriber = client
             ownTranscribeRunning = true
-            let batcher = makeTranscriptBatcher()
             transcriptTask = Task {
                 for await seg in stream {
+                    guard !isMuted, self.callId == callId, isActive else { continue }
                     var t = TranscriptSegment(callId: callId, segId: seg.id, text: seg.text, startMs: seg.startMs, endMs: seg.endMs,
                                               clientTs: Int64(Date().timeIntervalSince1970 * 1000))
                     t.isPartial = seg.isPartial
-                    await batcher.append(t)
+                    await makeTranscriptBatcher().append(t)
                 }
-                await batcher.flush()
+                await transcriptBatcher?.flush()
                 await MainActor.run { self.ownTranscribeRunning = false }
             }
         } catch {
@@ -356,7 +478,7 @@ public final class CallController {
     /// Fallback (D-201): if the meeting has Chime live transcription enabled and our own stream isn't
     /// running, forward our own final segments from Chime's events.
     fileprivate func receiveChimeTranscript(text: String, attendeeId: String, startMs: Int64, endMs: Int64, resultId: String) {
-        guard !ownTranscribeRunning, let callId, attendeeId != peerAttendeeId else { return }
+        guard !isMuted, isActive, !ownTranscribeRunning, let callId, attendeeId != peerAttendeeId else { return }
         let t = TranscriptSegment(callId: callId, segId: resultId, text: text, startMs: Int(startMs), endMs: Int(endMs),
                                   clientTs: Int64(Date().timeIntervalSince1970 * 1000))
         let batcher = makeTranscriptBatcher()
@@ -365,29 +487,43 @@ public final class CallController {
 
     private func makeTranscriptBatcher() -> TranscriptBatcher {
         if let transcriptBatcher { return transcriptBatcher }
-        let socket = socket
-        let batcher = TranscriptBatcher { segment in
-            try? await socket?.send(.transcript(segment))
+        let epoch = transcriptEpoch
+        let batcher = TranscriptBatcher { [weak self] segment in
+            await self?.sendTranscript(segment, epoch: epoch)
         }
         transcriptBatcher = batcher
         return batcher
     }
 
+    private func sendTranscript(_ segment: TranscriptSegment, epoch: Int) async {
+        guard !isMuted, isActive, transcriptEpoch == epoch, callId == segment.callId else { return }
+        try? await socket?.send(.transcript(segment))
+    }
+
     // MARK: Chime callbacks
 
-    fileprivate func audioStarted(reconnecting: Bool) {
+    func audioStarted(reconnecting: Bool) {
+        guard isActive else { return }
+        audioConnected = true
+        restoreMuteWhenReady()
         phase = .connected
         if startedAt == nil { startedAt = Date() }
         // Chime recreates its audio unit after a network reconnect, which resets this route.
         routeAudioToSpeaker()
     }
 
-    fileprivate func audioConnecting(reconnecting: Bool) {
+    func audioConnecting(reconnecting: Bool) {
+        guard isActive else { return }
+        audioConnected = false
         phase = reconnecting ? .reconnecting : .connecting
     }
 
-    fileprivate func audioStopped() {
-        Task { await remoteEnded() }
+    func audioStopped() {
+        let generation = sessionGeneration
+        Task {
+            guard sessionGeneration == generation else { return }
+            await leave()
+        }
     }
 
     fileprivate func setPoorNetwork(_ poor: Bool) { poorNetwork = poor }
@@ -420,7 +556,8 @@ public final class CallController {
 
     public func preview(peer: PublicUser, peerName: String, phase: Phase, muted: Bool = false, cameraOn: Bool = true,
                         remoteCameraOff: Bool = false, poorNetwork: Bool = false, suggestion: PhotoSuggestion? = nil,
-                        autoShown: PhotoSuggestion? = nil, display: DisplayState = .selfView) {
+                        autoShown: PhotoSuggestion? = nil, display: DisplayState = .selfView, callId: String? = nil) {
+        self.callId = callId
         self.peer = peer
         self.peerName = peerName
         self.phase = phase
@@ -447,10 +584,14 @@ private final class SessionBox: @unchecked Sendable {
 /// Chime observer protocols are non-isolated Obj-C; this bridge extracts values and hops to the main actor.
 private final class ChimeBridge: NSObject, AudioVideoObserver, VideoTileObserver, DataMessageObserver, TranscriptEventObserver, @unchecked Sendable {
     weak var owner: CallController?
-    init(owner: CallController) { self.owner = owner }
+    let generation: UUID
+    init(owner: CallController, generation: UUID) { self.owner = owner; self.generation = generation }
 
     private func main(_ body: @escaping @MainActor (CallController) -> Void) {
-        Task { @MainActor [weak owner] in if let owner { body(owner) } }
+        let generation = generation
+        Task { @MainActor [weak owner] in
+            if let owner, owner.sessionGeneration == generation { body(owner) }
+        }
     }
 
     func audioSessionDidStartConnecting(reconnecting: Bool) { main { $0.audioConnecting(reconnecting: reconnecting) } }

@@ -19,9 +19,20 @@ const DAY = 86_400;
 const RETRIEVAL_TOP_K = 10;
 const RERANK_TOP_K = 8;
 const MIN_RERANK_CONFIDENCE = 0.55;
+export const PHOTO_REPEAT_COOLDOWN_MS = 10_000;
+
+/** Deduplicate ASR revisions and brief bursts, not an entire conversation. */
+export function suppressRepeat(suggestions: { photoId: string; createdAt?: string; sourceSegId?: string }[], photoId: string, segId: string | undefined, now: number): boolean {
+  return suggestions.some(s => s.photoId === photoId && (
+    (!!segId && s.sourceSegId === segId) ||
+    (s.createdAt !== undefined && now - Date.parse(s.createdAt) >= 0 && now - Date.parse(s.createdAt) < PHOTO_REPEAT_COOLDOWN_MS)
+  ));
+}
 /** How far back the friend's speech can be and still come through this speaker's mic as echo. */
 const ECHO_WINDOW_MS = 15_000;
 const ECHO_MIN_OVERLAP = 0.7;
+// Simultaneous microphone pickup cannot establish who spoke. Only a clearly earlier line can veto.
+const ECHO_LEAD_MS = 750;
 
 export interface TranscriptInput {
   callId: string;
@@ -84,25 +95,37 @@ const words = (text: string) => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 
 /**
  * On speakerphone the friend's voice reaches this user's mic, so their transcript can repeat what
- * the friend just said. A line is echo when most of its words were in the friend's recent speech.
+ * the friend just said. Require a long matching sequence; common vocabulary alone isn't evidence.
  */
 export function isLikelyEcho(text: string, friendTexts: string[]): boolean {
   const mine = words(text);
-  if (mine.length < 3) return false;
-  const theirs = new Set(friendTexts.flatMap(words));
-  if (!theirs.size) return false;
-  return mine.filter((w) => theirs.has(w)).length / mine.length >= ECHO_MIN_OVERLAP;
+  if (mine.length < 5) return false;
+  // Require a near-verbatim sequence in a single utterance, not common words pooled across a conversation.
+  return friendTexts.some(friend => {
+    const theirs = words(friend);
+    let longest = 0;
+    let previous = new Uint16Array(theirs.length + 1);
+    for (const word of mine) {
+      const row = new Uint16Array(theirs.length + 1);
+      for (let j = 0; j < theirs.length; j++) {
+        if (word === theirs[j]) row[j + 1] = previous[j] + 1;
+        longest = Math.max(longest, row[j + 1]);
+      }
+      previous = row;
+    }
+    return longest >= 5 && longest / mine.length >= ECHO_MIN_OVERLAP;
+  });
 }
 
 const segTimeMs = (sk: string) => Number(sk.split('#')[1]);
 
 /** The friend's finals and latest partial received since `sinceMs`. */
-async function friendSpeech(callId: string, friendId: string | undefined, sinceMs: number): Promise<string[]> {
+async function friendSpeech(callId: string, friendId: string | undefined, sinceMs: number, beforeMs: number): Promise<string[]> {
   if (!friendId) return [];
   const [segs, live] = await Promise.all([
     query({
       KeyConditionExpression: 'pk = :pk AND sk BETWEEN :lo AND :hi',
-      ExpressionAttributeValues: { ':pk': `CALL#${callId}`, ':lo': segSk(sinceMs, '', ''), ':hi': segSk(Date.now() + 1, '~', '~') },
+      ExpressionAttributeValues: { ':pk': `CALL#${callId}`, ':lo': segSk(sinceMs, '', ''), ':hi': segSk(beforeMs, '~', '~') },
       ConsistentRead: true,
     }),
     query({
@@ -112,7 +135,7 @@ async function friendSpeech(callId: string, friendId: string | undefined, sinceM
     }),
   ]);
   return [...segs, ...live.filter((l) => Number(l.at) >= sinceMs)]
-    .filter((s) => s.userId === friendId)
+    .filter((s) => s.userId === friendId && (s.at === undefined ? segTimeMs(s.sk) : Number(s.at)) <= beforeMs)
     .map((s) => String(s.text ?? ''));
 }
 
@@ -170,9 +193,9 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   });
   sw.lap('context');
   const echoSince = receivedAt - ECHO_WINDOW_MS;
-  const recentFriend = segs.filter((s) => s.userId === friendId && segTimeMs(s.sk) >= echoSince).map((s) => String(s.text));
+  const recentFriend = segs.filter((s) => s.userId === friendId && segTimeMs(s.sk) >= echoSince && segTimeMs(s.sk) <= receivedAt - ECHO_LEAD_MS).map((s) => String(s.text));
   const live = friendId ? await get(K.callLive(call.id, friendId)) : undefined;
-  if (live && Number(live.at) >= echoSince) recentFriend.push(String(live.text));
+  if (live && Number(live.at) >= echoSince && Number(live.at) <= receivedAt - ECHO_LEAD_MS) recentFriend.push(String(live.text));
   if (isLikelyEcho(text, recentFriend)) {
     emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'echo' });
     return { stored: !input.isPartial, outcome: 'echo' };
@@ -200,9 +223,7 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     return fusePhotoHits(imageGroups, captionGroups, detection.placeHint);
   };
   let hits = await search(range);
-  const suggested = new Set(
-    (await queryPrefix(`CALL#${call.id}`, 'SUGG#')).filter((s) => s.userId === userId).map((s) => `${userId}#${s.photoId}`),
-  );
+  const suggestions = (await queryPrefix<{ userId: string; photoId: string; createdAt?: string; sourceSegId?: string }>(`CALL#${call.id}`, 'SUGG#')).filter(s => s.userId === userId);
   let best = pickHit(hits, env.similarityThreshold, new Set());
   if (!best && (range.fromSec || range.toSec)) {
     hits = await search({});
@@ -249,16 +270,21 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
       return { stored: false, outcome: 'superseded' };
     }
   }
-  // The friend's own words for this line may have landed while we searched.
-  if (isLikelyEcho(text, await friendSpeech(call.id, friendId, echoSince))) {
+  // Use the same earlier-than-input cutoff on recheck. Later speech must never retroactively veto the original speaker.
+  if (isLikelyEcho(text, await friendSpeech(call.id, friendId, echoSince, receivedAt - ECHO_LEAD_MS))) {
     emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'echo' });
     return { stored: !input.isPartial, outcome: 'echo' };
   }
-  // Repeated references must not promote an unrelated runner-up after the right photo was shown.
-  if (suggested.has(best.key) || Date.now() - receivedAt > 12_000 || (await getCall(call.id)).endedAt) {
+  const photoId = best.key.split('#')[1];
+  // Keep ranking all photos: a duplicate winner must never promote an unrelated runner-up.
+  if (suppressRepeat(suggestions, photoId, input.segId, Date.now())) {
+    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'repeat_cooldown' });
+    return { stored: !input.isPartial, outcome: 'repeat_cooldown' };
+  }
+  if (Date.now() - receivedAt > 12_000 || (await getCall(call.id)).endedAt) {
+    emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'stale_or_ended' });
     return { stored: !input.isPartial, outcome: 'suppressed' };
   }
-  const photoId = best.key.split('#')[1];
   const photo = await get(K.photo(userId, photoId));
   if (!photo || photo.status !== 'indexed') return { stored: true, detection };
   const suggestionId = newId('g');
@@ -285,6 +311,7 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     userId,
     photoId,
     query: detection.query,
+    sourceSegId: input.segId,
     confidence: detection.confidence,
     similarity: best.similarity,
     fusionScore: best.metadata.fusionScore,

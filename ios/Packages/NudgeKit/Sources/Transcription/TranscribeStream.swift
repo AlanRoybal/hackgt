@@ -106,10 +106,12 @@ public actor TranscribeStreamClient {
         return stream
     }
 
+    public nonisolated let muteGate = SpeechMuteGate()
+
     public func send(pcm: Data) async {
         guard let socket else { return }
-        do { try await socket.send(.data(EventStreamMessage.audioEvent(pcm).encoded())) }
-        catch { log.error("send: \(String(describing: error), privacy: .public)") }
+        do { try await socket.send(.data(EventStreamMessage.audioEvent(muteGate.filter(pcm)).encoded())) }
+        catch { log.error("send: \((error as NSError).domain + ":" + String((error as NSError).code), privacy: .public)") }
     }
 
     public func stop() async {
@@ -130,7 +132,7 @@ public actor TranscribeStreamClient {
                 let decoded = try EventStreamMessage.decode(data)
                 for seg in try TranscriptParser.updates(from: decoded) { continuation?.yield(seg) }
             } catch {
-                log.error("receive: \(String(describing: error), privacy: .public)")
+                log.error("receive: \((error as NSError).domain + ":" + String((error as NSError).code), privacy: .public)")
                 break
             }
         }
