@@ -7,6 +7,8 @@ import { K, newId } from '../lib/keys.js';
 import { loadUsers } from '../lib/users.js';
 import { sendToUser } from '../lib/ws.js';
 
+const firstName = (displayName: string | undefined, fallback: string) => displayName?.trim().split(/\s+/)[0] || fallback;
+
 export async function summarize(callId: string, now = new Date()) {
   const call = await getCall(callId);
   if (call.summarized) return { skipped: 'already' };
@@ -20,6 +22,7 @@ export async function summarize(callId: string, now = new Date()) {
     const out = await summarizeCall(
       segs.map((s) => ({ who: s.userId === a ? ('A' as const) : ('B' as const), text: s.text })),
       now,
+      { A: firstName(users.get(a)?.displayName, 'A'), B: firstName(users.get(b)?.displayName, 'B') },
     );
     const endedAt = call.endedAt ?? now.toISOString();
     const durationSec = Math.max(0, Math.round((Date.parse(endedAt) - Date.parse(call.startedAt)) / 1000));

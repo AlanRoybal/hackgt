@@ -108,6 +108,23 @@ export async function nudgeDTO(n: NudgeItem, viewerId: string, users?: Map<strin
   };
 }
 
+/**
+ * Topics store followUpAfter as a calendar day ("YYYY-MM-DD", compared as a string by the matcher). Clients decode
+ * dates as ISO-8601 timestamps, so send midnight UTC; a bare day made the whole memories payload undecodable.
+ */
+export function topicDTO(t: Record<string, any>) {
+  const f = typeof t.followUpAfter === 'string' ? t.followUpAfter : undefined;
+  return {
+    id: t.id,
+    title: t.title,
+    aboutUserId: t.aboutUserId,
+    summary: t.summary,
+    followUpAfter: f && /^\d{4}-\d{2}-\d{2}$/.test(f) ? `${f}T00:00:00.000Z` : f,
+    status: t.status,
+    sourceCallId: t.sourceCallId,
+  };
+}
+
 export async function broadcastNudge(n: NudgeItem) {
   const users = await loadUsers(n.participants);
   await Promise.all(

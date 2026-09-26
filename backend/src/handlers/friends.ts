@@ -3,7 +3,7 @@ import { checkHandle, normalizeHandle } from '../engine/handles.js';
 import { freeStatus } from '../engine/overlap.js';
 import { isStale } from '../engine/suppression.js';
 import { batchDelete, batchGet, del, get, put, queryGsi, queryPartition, queryPrefix, update } from '../lib/db.js';
-import { createDirectNudge, nudgeDTO } from '../lib/flows.js';
+import { createDirectNudge, nudgeDTO, topicDTO } from '../lib/flows.js';
 import { bad, forbidden, notFound, router } from '../lib/http.js';
 import { K, pairKey } from '../lib/keys.js';
 import { payloads, pushToUser } from '../lib/push.js';
@@ -97,15 +97,7 @@ async function requireFriend(me: string, other: string) {
 
 async function topicDTOs(pk: string) {
   const topics = await queryPrefix(`PAIR#${pk}`, 'TOPIC#');
-  return topics.map((t) => ({
-    id: t.id,
-    title: t.title,
-    aboutUserId: t.aboutUserId,
-    summary: t.summary,
-    followUpAfter: t.followUpAfter ?? undefined,
-    status: t.status,
-    sourceCallId: t.sourceCallId,
-  }));
+  return topics.map(topicDTO);
 }
 
 export const handler = router({
