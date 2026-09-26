@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { afterAll, describe, expect, it } from 'vitest';
-import { ApiError, call, cleanup, makeUser, OUTPUTS, until, type TestUser } from './client.js';
+import { ApiError, befriend, call, cleanup, makeUser, OUTPUTS, until, type TestUser } from './client.js';
 
 const ddb = new DynamoDBClient({ region: 'us-east-1' });
 const countPk = async (pk: string) =>
@@ -138,6 +138,37 @@ describe('accounts', () => {
     expect((await a.req('GET', '/blocks')).users.map((u: any) => u.id)).toEqual([b.id]);
     await a.req('DELETE', `/blocks/${b.id}`);
     expect((await a.req('POST', '/friend-requests', { userId: b.id })).relation).toBe('requested');
+  });
+
+  it('ACC-13: tapping phones adds a friend once both taps land; existing friends are left alone', async () => {
+    const a = await makeUser('ta');
+    const b = await makeUser('tb');
+    const c = await makeUser('tc');
+    users.push(a, b, c);
+    const ta = (await a.req('POST', '/tap/token')).token;
+    const tb = (await b.req('POST', '/tap/token')).token;
+    await expectStatus(a.req('POST', '/tap', { token: ta }), 400, 'own_token');
+    await expectStatus(a.req('POST', '/tap', { token: 'x'.repeat(24) }), 404, 'tap_expired');
+    // One side alone is not enough.
+    const first = await a.req('POST', '/tap', { token: tb });
+    expect(first).toEqual({ status: 'pending' }); // no profile until they're friends
+    expect((await a.req('GET', '/friends')).friends).toEqual([]);
+    // The other phone's tap makes the friendship; the first phone's retry hears about it.
+    const second = await b.req('POST', '/tap', { token: ta });
+    expect(second.status).toBe('friends');
+    expect(second.user.id).toBe(a.id);
+    expect((await a.req('POST', '/tap', { token: tb })).status).toBe('friends');
+    expect((await a.req('GET', '/friends')).friends.map((f: any) => f.user.id)).toEqual([b.id]);
+    // Already friends: nothing changes and no request is created.
+    await befriend(a, c);
+    const since = (await a.req('GET', '/friends')).friends.find((f: any) => f.user.id === c.id).since;
+    const tc = (await c.req('POST', '/tap/token')).token;
+    expect((await a.req('POST', '/tap', { token: tc })).status).toBe('already_friends');
+    expect((await a.req('GET', '/friends')).friends.find((f: any) => f.user.id === c.id).since).toBe(since);
+    expect((await c.req('GET', '/friend-requests')).incoming).toEqual([]);
+    // Blocked users can't be tapped.
+    await a.req('POST', `/blocks/${b.id}`);
+    await expectStatus(b.req('POST', '/tap', { token: (await a.req('POST', '/tap/token')).token }), 404, 'user_not_found');
   });
 
   it('WebSocket: bad tokens are rejected at $connect; ping → pong', async () => {
