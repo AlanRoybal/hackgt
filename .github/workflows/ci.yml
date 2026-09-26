@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (typecheck + unit tests + synth)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: CDK synth (no AWS credentials needed)
+        run: npx cdk synth -c stage=dev --quiet
+
+  peer-bot:
+    name: Peer bot (protocol tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/peer-bot
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/peer-bot/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  ios:
+    name: iOS (NudgeKit tests + app build)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+      - run: brew install xcodegen
+      - name: Generate project
+        working-directory: ios
+        run: xcodegen generate
+      - name: NudgeKit tests
+        working-directory: ios/Packages/NudgeKit
+        run: |
+          SIM="$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9]+ Pro \(' | sed 's/ ($//')"
+          xcodebuild test -scheme NudgeKit-Package -destination "platform=iOS Simulator,name=${SIM}" -quiet
+      - name: Build app + extensions (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild build -project Nudge.xcodeproj -scheme Nudge -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO -quiet

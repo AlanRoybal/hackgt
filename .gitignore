@@ -17,3 +17,4 @@ evals/**/out/
 .swiftpm/
 Package.resolved.bak
 __pycache__/
+.claude/worktrees/
