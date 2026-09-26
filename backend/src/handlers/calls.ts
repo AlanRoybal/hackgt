@@ -3,6 +3,7 @@ import { get, put, update } from '../lib/db.js';
 import { applyEvent, endCall, getCall, otherOf, topicDTO, type CallItem } from '../lib/flows.js';
 import { bad, forbidden, HttpError, notFound, Res, router } from '../lib/http.js';
 import { K, newId } from '../lib/keys.js';
+import { mediaTypeOf } from '../lib/media.js';
 import { presignGet } from '../lib/s3.js';
 import { getFriendship, getUser, publicUser } from '../lib/users.js';
 import { queryPrefix } from '../lib/db.js';
@@ -15,6 +16,12 @@ async function participantCall(id: string, userId: string): Promise<CallItem> {
   const c = await getCall(id);
   if (!c.participants.includes(userId)) throw notFound('call_not_found');
   return c;
+}
+
+/** Extra share/recap fields for a video (a photo or share item); empty for photos. */
+async function videoFields(item: Record<string, any>) {
+  if (mediaTypeOf(item) !== 'video' || !item.videoKey) return {};
+  return { mediaType: 'video', durationMs: item.durationMs, videoUrl: await presignGet(item.videoKey, SHARE_URL_TTL_S) };
 }
 
 const requireActive = (c: CallItem) => {
@@ -82,6 +89,9 @@ export const handler = router({
       recipientId: otherOf(c.participants, userId),
       photoId: body.photoId,
       s3Key: photo.s3Key,
+      mediaType: mediaTypeOf(photo),
+      videoKey: photo.videoKey,
+      durationMs: photo.durationMs,
       suggestionId: typeof body.suggestionId === 'string' ? body.suggestionId : undefined,
       createdAt: new Date().toISOString(),
     });
@@ -89,7 +99,7 @@ export const handler = router({
       const suggestion = await get(K.suggestion(c.id, body.suggestionId));
       if (suggestion?.userId === userId) await update(K.suggestion(c.id, body.suggestionId), { outcome: 'shared', sharedAt: new Date().toISOString() });
     }
-    return { shareId, thumbUrl: await presignGet(photo.s3Key, SHARE_URL_TTL_S) };
+    return { shareId, thumbUrl: await presignGet(photo.s3Key, SHARE_URL_TTL_S), ...(await videoFields(photo)) };
   },
 
   'POST /calls/{id}/suggestions/{suggestionId}/feedback': async ({ userId, params, body }) => {
@@ -101,7 +111,7 @@ export const handler = router({
     await update(K.suggestion(params.id, params.suggestionId), { outcome, feedbackAt: new Date().toISOString() });
   },
 
-  // Post-call recap: every photo either person showed, once each, oldest first. Photos since deleted are left out.
+  // Post-call recap: every photo or video either person showed, once each, oldest first. Photos since deleted are left out.
   'GET /calls/{id}/shares': async ({ userId, params }) => {
     const c = await participantCall(params.id, userId);
     if (!c.endedAt) throw new HttpError(409, 'call_active');
@@ -115,7 +125,7 @@ export const handler = router({
       seen.add(key);
       const photo = await get(K.photo(s.senderId, s.photoId));
       if (!photo) continue;
-      photos.push({ shareId: s.shareId, senderId: s.senderId, url: await presignGet(s.s3Key, SHARE_URL_TTL_S), createdAt: s.createdAt });
+      photos.push({ shareId: s.shareId, senderId: s.senderId, url: await presignGet(s.s3Key, SHARE_URL_TTL_S), createdAt: s.createdAt, ...(await videoFields(s)) });
     }
     return { photos };
   },
@@ -126,7 +136,8 @@ export const handler = router({
     const s = await get(K.share(c.id, params.shareId));
     if (!s) throw notFound('share_not_found');
     if (s.recipientId !== userId) throw forbidden('not_recipient');
-    return { url: await presignGet(s.s3Key, SHARE_URL_TTL_S), expiresAt: new Date(Date.now() + SHARE_URL_TTL_S * 1000).toISOString() };
+    // `url` stays the still image (a video's poster) so older apps show the poster for a video share.
+    return { url: await presignGet(s.s3Key, SHARE_URL_TTL_S), ...(await videoFields(s)), expiresAt: new Date(Date.now() + SHARE_URL_TTL_S * 1000).toISOString() };
   },
 
   'POST /calls/{id}/shares/{shareId}/shown': async ({ userId, params, body }) => {

@@ -3,6 +3,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -15,8 +16,19 @@ export const s3 = new S3Client({});
 export const presignGet = (key: string, expiresIn: number) =>
   getSignedUrl(s3, new GetObjectCommand({ Bucket: env.bucket, Key: key }), { expiresIn });
 
-export const presignPut = (key: string, expiresIn = 900) =>
-  getSignedUrl(s3, new PutObjectCommand({ Bucket: env.bucket, Key: key, ContentType: 'image/jpeg' }), { expiresIn });
+export const presignPut = (key: string, expiresIn = 900, contentType = 'image/jpeg') =>
+  getSignedUrl(s3, new PutObjectCommand({ Bucket: env.bucket, Key: key, ContentType: contentType }), { expiresIn });
+
+/** Size in bytes, or undefined when the object isn't there (yet). */
+export async function objectSize(key: string): Promise<number | undefined> {
+  try {
+    const r = await s3.send(new HeadObjectCommand({ Bucket: env.bucket, Key: key }));
+    return r.ContentLength ?? 0;
+  } catch (e) {
+    if ((e as any)?.name === 'NotFound' || (e as any)?.$metadata?.httpStatusCode === 404) return undefined;
+    throw e;
+  }
+}
 
 export async function getObjectBytes(key: string): Promise<Buffer> {
   const r = await s3.send(new GetObjectCommand({ Bucket: env.bucket, Key: key }));
@@ -42,3 +54,5 @@ export async function deletePrefix(prefix: string): Promise<number> {
 
 export const avatarKey = (userId: string) => `avatars/${userId}.jpg`;
 export const photoKey = (userId: string, assetHash: string) => `photos/${userId}/${assetHash}.jpg`;
+/** A video's clip sits next to its poster frame (`photoKey`), so prefix deletes and lifecycle rules cover both. */
+export const videoKey = (userId: string, assetHash: string) => `photos/${userId}/${assetHash}.mp4`;
