@@ -87,10 +87,10 @@ describe('reference helpers', () => {
     const caption = [[{ key: 'u#b', similarity: 0.42, metadata: { caption: 'lantern cafe', place: 'Atlanta cafe' } }]];
     expect(fusePhotoHits(image, caption, 'Atlanta').map((x) => x.key)).toEqual(['u#b', 'u#a']);
   });
-  it('treats a line that repeats the friend as echo, even with transcription slips', () => {
+  it('only vetoes near-verbatim echo, leaving ambiguous transcription slips alone', () => {
     const friend = ['I made this huge bowl of ramen last night with a soft egg'];
     expect(isLikelyEcho('I made this huge bowl of ramen last night', friend)).toBe(true);
-    expect(isLikelyEcho('made this huge bowl of rum in last night with soft egg', friend)).toBe(true);
+    expect(isLikelyEcho('made this huge bowl of rum in last night with soft egg', friend)).toBe(false);
   });
   it('keeps real replies and the speaker\'s own stories', () => {
     const friend = ['I made this huge bowl of ramen last night with a soft egg'];
@@ -98,6 +98,7 @@ describe('reference helpers', () => {
     expect(isLikelyEcho('ramen sounds amazing, we went hiking at Stone Mountain', friend)).toBe(false);
     expect(isLikelyEcho('I made this huge bowl of ramen', [])).toBe(false);
     expect(isLikelyEcho('ramen ramen', friend)).toBe(false);
+    expect(isLikelyEcho('I ate ramen in Chinatown in Houston', ['I ate tacos', 'ramen in Atlanta', 'Chinatown in Houston'])).toBe(false);
   });
 });
 

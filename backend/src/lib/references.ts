@@ -21,6 +21,8 @@ const MIN_RERANK_CONFIDENCE = 0.55;
 /** How far back the friend's speech can be and still come through this speaker's mic as echo. */
 const ECHO_WINDOW_MS = 15_000;
 const ECHO_MIN_OVERLAP = 0.7;
+// Simultaneous microphone pickup cannot establish who spoke. Only a clearly earlier line can veto.
+const ECHO_LEAD_MS = 750;
 
 export interface TranscriptInput {
   callId: string;
@@ -83,25 +85,37 @@ const words = (text: string) => text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 
 /**
  * On speakerphone the friend's voice reaches this user's mic, so their transcript can repeat what
- * the friend just said. A line is echo when most of its words were in the friend's recent speech.
+ * the friend just said. Require a long matching sequence; common vocabulary alone isn't evidence.
  */
 export function isLikelyEcho(text: string, friendTexts: string[]): boolean {
   const mine = words(text);
-  if (mine.length < 3) return false;
-  const theirs = new Set(friendTexts.flatMap(words));
-  if (!theirs.size) return false;
-  return mine.filter((w) => theirs.has(w)).length / mine.length >= ECHO_MIN_OVERLAP;
+  if (mine.length < 5) return false;
+  // Require a near-verbatim sequence in a single utterance, not common words pooled across a conversation.
+  return friendTexts.some(friend => {
+    const theirs = words(friend);
+    let longest = 0;
+    let previous = new Uint16Array(theirs.length + 1);
+    for (const word of mine) {
+      const row = new Uint16Array(theirs.length + 1);
+      for (let j = 0; j < theirs.length; j++) {
+        if (word === theirs[j]) row[j + 1] = previous[j] + 1;
+        longest = Math.max(longest, row[j + 1]);
+      }
+      previous = row;
+    }
+    return longest >= 5 && longest / mine.length >= ECHO_MIN_OVERLAP;
+  });
 }
 
 const segTimeMs = (sk: string) => Number(sk.split('#')[1]);
 
 /** The friend's finals and latest partial received since `sinceMs`. */
-async function friendSpeech(callId: string, friendId: string | undefined, sinceMs: number): Promise<string[]> {
+async function friendSpeech(callId: string, friendId: string | undefined, sinceMs: number, beforeMs: number): Promise<string[]> {
   if (!friendId) return [];
   const [segs, live] = await Promise.all([
     query({
       KeyConditionExpression: 'pk = :pk AND sk BETWEEN :lo AND :hi',
-      ExpressionAttributeValues: { ':pk': `CALL#${callId}`, ':lo': segSk(sinceMs, '', ''), ':hi': segSk(Date.now() + 1, '~', '~') },
+      ExpressionAttributeValues: { ':pk': `CALL#${callId}`, ':lo': segSk(sinceMs, '', ''), ':hi': segSk(beforeMs, '~', '~') },
       ConsistentRead: true,
     }),
     query({
@@ -111,7 +125,7 @@ async function friendSpeech(callId: string, friendId: string | undefined, sinceM
     }),
   ]);
   return [...segs, ...live.filter((l) => Number(l.at) >= sinceMs)]
-    .filter((s) => s.userId === friendId)
+    .filter((s) => s.userId === friendId && (s.at === undefined ? segTimeMs(s.sk) : Number(s.at)) <= beforeMs)
     .map((s) => String(s.text ?? ''));
 }
 
@@ -169,9 +183,9 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   });
   sw.lap('context');
   const echoSince = receivedAt - ECHO_WINDOW_MS;
-  const recentFriend = segs.filter((s) => s.userId === friendId && segTimeMs(s.sk) >= echoSince).map((s) => String(s.text));
+  const recentFriend = segs.filter((s) => s.userId === friendId && segTimeMs(s.sk) >= echoSince && segTimeMs(s.sk) <= receivedAt - ECHO_LEAD_MS).map((s) => String(s.text));
   const live = friendId ? await get(K.callLive(call.id, friendId)) : undefined;
-  if (live && Number(live.at) >= echoSince) recentFriend.push(String(live.text));
+  if (live && Number(live.at) >= echoSince && Number(live.at) <= receivedAt - ECHO_LEAD_MS) recentFriend.push(String(live.text));
   if (isLikelyEcho(text, recentFriend)) {
     emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'echo' });
     return { stored: !input.isPartial, outcome: 'echo' };
@@ -248,8 +262,8 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
       return { stored: false, outcome: 'superseded' };
     }
   }
-  // The friend's own words for this line may have landed while we searched.
-  if (isLikelyEcho(text, await friendSpeech(call.id, friendId, echoSince))) {
+  // Use the same earlier-than-input cutoff on recheck. Later speech must never retroactively veto the original speaker.
+  if (isLikelyEcho(text, await friendSpeech(call.id, friendId, echoSince, receivedAt - ECHO_LEAD_MS))) {
     emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'echo' });
     return { stored: !input.isPartial, outcome: 'echo' };
   }
