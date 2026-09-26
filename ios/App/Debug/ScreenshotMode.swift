@@ -18,9 +18,12 @@ enum ScreenshotMode {
     /// Screenshot capture of the Reduce Motion variant (the simulator setting needs a respring to apply).
     static var forceReduceMotion: Bool { ProcessInfo.processInfo.arguments.contains("-forceReduceMotion") }
 
+    /// `-liveMotion`: run animation timelines instead of showing settled poses (for checking motion by hand).
+    static var liveMotion: Bool { ProcessInfo.processInfo.arguments.contains("-liveMotion") }
+
     /// Every screen id the capture script walks through (keep in sync with ios/scripts/screenshots.sh).
     static let all: [String] = [
-        "welcome", "signin", "terms", "handle", "phone", "phone-code",
+        "launch", "welcome", "signin", "terms", "handle", "phone", "phone-code",
         "permission-notifications", "permission-calendar", "permission-photos", "permission-contacts",
         "permission-camera", "permission-focus", "permission-motion", "permission-denied", "add-first-friends",
         "friends", "friends-empty", "friends-loading", "friends-offline", "add-friends-search", "add-friends-contacts",
@@ -40,17 +43,27 @@ struct ScreenshotHost: View {
 
     init(screen: String) {
         self.screen = screen
-        MockData.configure(AppModel.shared, for: screen)
+        // NudgeApp.body re-runs (and re-creates this view) on scene-phase changes; configure the mocks only once
+        // so a re-init doesn't reset the model mid-render.
+        if !Self.configured {
+            Self.configured = true
+            MockData.configure(AppModel.shared, for: screen)
+        }
     }
+
+    private static var configured = false
 
     var body: some View {
         content
             .environment(app)
             .transformEnvironment(\._accessibilityReduceMotion) { if ScreenshotMode.forceReduceMotion { $0 = true } }
+            // The capture scene never becomes active, so animation timelines don't tick: show settled poses.
+            .environment(\.motionSnapshot, !ScreenshotMode.liveMotion)
     }
 
     @ViewBuilder var content: some View {
         switch screen {
+        case "launch": LaunchView()
         case "welcome": WelcomeView(onContinue: {})
         case "signin": NavigationStack { SignInView() }
         case "terms": TermsView()

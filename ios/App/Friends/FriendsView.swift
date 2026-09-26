@@ -32,37 +32,14 @@ struct FriendsView: View {
                     }
 
                     if !app.friends.hasLoaded {
-                        CardList { ForEach(0..<4, id: \.self) { _ in SkeletonRow().padding(.horizontal, Space.m) } }
+                        CardList { ForEach(0..<4, id: \.self) { i in SkeletonRow(index: i).padding(.horizontal, Space.m) } }
                     } else if app.friends.friends.isEmpty {
                         EmptyStateView(.friends, title: "Add your first friend",
                                        message: "Nudge finds the moments you're both free. Start with one person you'd love to talk to more.",
                                        actionTitle: "Add friends") { showAdd = true }
                             .padding(.top, Space.xxl)
                     } else {
-                        if !app.friends.freeNow.isEmpty {
-                            VStack(alignment: .leading, spacing: Space.s) {
-                                SectionHeader("Free now")
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: Space.s) {
-                                        ForEach(app.friends.freeNow) { f in
-                                            NavigationLink(value: f.id) { FreeNowCard(friend: f) }.buttonStyle(.plain)
-                                        }
-                                    }
-                                }
-                                .scrollClipDisabled()
-                            }
-                        }
-                        VStack(alignment: .leading, spacing: Space.s) {
-                            SectionHeader("All friends", trailing: "\(app.friends.friends.count)")
-                            CardList {
-                                let list = app.friends.sortedFriends
-                                ForEach(Array(list.enumerated()), id: \.element.id) { i, f in
-                                    NavigationLink(value: f.id) { FriendRow(friend: f).padding(.horizontal, Space.m) }
-                                        .buttonStyle(.plain)
-                                    if i < list.count - 1 { RowDivider().padding(.leading, 56) }
-                                }
-                            }
-                        }
+                        FriendsList(freeNow: app.friends.freeNow, friends: app.friends.sortedFriends)
                     }
                     if let error = app.friends.error, app.friends.hasLoaded, app.friends.friends.isEmpty, !app.isPreview {
                         Banner(error, style: .warning)
@@ -94,13 +71,72 @@ struct FriendsView: View {
     }
 }
 
+/// Figma M09: on first load rows fade up 8 pt (0.35 s ease-out, 0.03 s apart). Live status: free rings and dots
+/// breathe 100 → 45% every 2.4 s, each friend 0.3 s behind the last so they don't pulse in unison.
+/// Created when friends first load, so switching tabs doesn't replay it.
+struct FriendsList: View {
+    let freeNow: [Friend]
+    let friends: [Friend]
+
+    private func rowIn(_ beat: Beat, _ i: Int) -> MotionLayer {
+        let d = Motion.Durations.entranceSubtle
+        return beat.fadeUp(at: Motion.Stagger.subtle * Double(i), fade: d, rise: d, distance: 8)
+    }
+
+    /// Keyed by the friend's place in the full list, so their Free now card and row breathe together.
+    private func pulse(_ beat: Beat, _ friend: Friend) -> Double {
+        guard !beat.reduceMotion else { return 1 }
+        let i = friends.firstIndex { $0.id == friend.id } ?? 0
+        return IdleMotion.dim(beat.t, period: Motion.Period.breathe, low: 0.45, offset: 0.3 * Double(i))
+    }
+
+    var body: some View {
+        let entrance = Motion.Durations.entranceSubtle + Motion.Stagger.subtle * Double(freeNow.count + friends.count)
+        MotionTimeline(settlesAt: entrance, loops: friends.contains(where: \.freeNow)) { beat in
+            VStack(alignment: .leading, spacing: Space.l) {
+                if !freeNow.isEmpty {
+                    VStack(alignment: .leading, spacing: Space.s) {
+                        SectionHeader("Free now")
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: Space.s) {
+                                ForEach(Array(freeNow.enumerated()), id: \.element.id) { i, f in
+                                    NavigationLink(value: f.id) { FreeNowCard(friend: f, pulse: pulse(beat, f)) }
+                                        .buttonStyle(.plain)
+                                        .motionLayer(rowIn(beat, i))
+                                }
+                            }
+                        }
+                        .scrollClipDisabled()
+                    }
+                }
+                VStack(alignment: .leading, spacing: Space.s) {
+                    SectionHeader("All friends", trailing: "\(friends.count)")
+                    CardList {
+                        ForEach(Array(friends.enumerated()), id: \.element.id) { i, f in
+                            Group {
+                                NavigationLink(value: f.id) {
+                                    FriendRow(friend: f, pulse: pulse(beat, f)).padding(.horizontal, Space.m)
+                                }
+                                .buttonStyle(.plain)
+                                if i < friends.count - 1 { RowDivider().padding(.leading, 56) }
+                            }
+                            .motionLayer(rowIn(beat, freeNow.count + i))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct FreeNowCard: View {
     let friend: Friend
+    var pulse: Double = 1
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: Space.xs) {
-            AvatarView(user: friend.user, name: friend.name, size: 56, ring: true)
+            AvatarView(user: friend.user, name: friend.name, size: 56, ring: true, ringOpacity: pulse)
             Text(friend.name).font(Typography.friendName).foregroundStyle(Palette.ink).lineLimit(1)
             Text(friend.freeUntil.map { "until \($0.formatted(date: .omitted, time: .shortened))" } ?? "free now")
                 .font(.caption.weight(.medium)).foregroundStyle(Palette.mintStrong)
