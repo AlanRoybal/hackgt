@@ -196,19 +196,25 @@ public struct Friend: Codable, Sendable, Hashable, Identifiable {
     public var lastCallAt: Date?
     public var freeNow: Bool
     public var freeUntil: Date?
+    /// When the current busy stretch ends; nil when free or when the server has nothing fresh.
+    public var busyUntil: Date?
 
     public var id: String { user.id }
     /// The name this viewer sees everywhere: their private nickname, else the display name.
     public var name: String { nickname?.nonEmpty ?? user.displayName }
 
-    public init(user: PublicUser, nickname: String? = nil, since: Date, lastCallAt: Date? = nil, freeNow: Bool = false, freeUntil: Date? = nil) {
+    public init(user: PublicUser, nickname: String? = nil, since: Date, lastCallAt: Date? = nil, freeNow: Bool = false, freeUntil: Date? = nil, busyUntil: Date? = nil) {
         self.user = user
         self.nickname = nickname
         self.since = since
         self.lastCallAt = lastCallAt
         self.freeNow = freeNow
         self.freeUntil = freeUntil
+        self.busyUntil = busyUntil
     }
+
+    /// The next moment this status stops being true: the free window closing or the busy stretch ending.
+    public var statusChangesAt: Date? { freeNow ? freeUntil : busyUntil }
 }
 
 public enum Relation: String, Codable, Sendable {

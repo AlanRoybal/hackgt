@@ -88,6 +88,7 @@ async function friendDTO(me: string, fs: FriendshipItem, users: Map<string, User
     lastCallAt: fs.lastCallAt,
     freeNow: status.freeNow,
     freeUntil: status.freeUntil,
+    busyUntil: status.busyUntil,
   };
 }
 

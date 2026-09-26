@@ -82,6 +82,6 @@ describe('mergeBusyBlocks / freeStatus', () => {
   it('reports free until the next block', () => {
     const now = T('2026-09-26T09:00:00Z');
     expect(freeStatus(now, [b('2026-09-26T10:00:00Z', '2026-09-26T11:00:00Z')])).toEqual({ freeNow: true, freeUntil: '2026-09-26T10:00:00.000Z' });
-    expect(freeStatus(T('2026-09-26T10:30:00Z'), [b('2026-09-26T10:00:00Z', '2026-09-26T11:00:00Z')])).toEqual({ freeNow: false });
+    expect(freeStatus(T('2026-09-26T10:30:00Z'), [b('2026-09-26T10:00:00Z', '2026-09-26T11:00:00Z')])).toEqual({ freeNow: false, busyUntil: '2026-09-26T11:00:00.000Z' });
   });
 });

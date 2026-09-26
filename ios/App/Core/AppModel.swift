@@ -52,6 +52,7 @@ final class AppModel {
     private var apnsToken: String?
     private var eventLoop: Task<Void, Never>?
     private var statusLoop: Task<Void, Never>?
+    private var friendsLoop: Task<Void, Never>?
     private var started = false
     private var backgroundedAt: Date?
     /// When a notification tap or link last chose where the app should land.
@@ -153,6 +154,8 @@ final class AppModel {
         guard !isPreview, session.status == .signedIn else { return }
         await availability.sync(reason: "foreground")
         await nudges.refreshActive()
+        // Free/busy is computed at fetch time, so what's on screen is as old as the last fetch.
+        await friends.load()
     }
 
     // MARK: Returning home
@@ -194,6 +197,7 @@ final class AppModel {
         Task { await socket.disconnect() }
         eventLoop?.cancel()
         statusLoop?.cancel()
+        friendsLoop?.cancel()
         started = false
         session.signOut()
     }
@@ -228,6 +232,8 @@ final class AppModel {
             guard let stream = await self?.socket.statusUpdates() else { return }
             for await s in stream { self?.socketStatus = s }
         }
+        friendsLoop?.cancel()
+        friendsLoop = Task { [friends] in await friends.keepFresh() }
     }
 
     func route(_ event: ServerEvent) {

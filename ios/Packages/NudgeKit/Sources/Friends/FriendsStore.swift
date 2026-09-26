@@ -29,6 +29,7 @@ public final class FriendsStore {
 
     public func load() async {
         isLoading = true
+        lastLoadedAt = Date()
         defer { isLoading = false; hasLoaded = true }
         do {
             async let f = api.friends()
@@ -38,6 +39,37 @@ public final class FriendsStore {
             error = nil
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Longest the list goes without a refetch, so friends' calendar changes show up too.
+    public static let refreshInterval: TimeInterval = 5 * 60
+    var lastLoadedAt = Date.distantPast
+
+    /// True once someone's "free until" or "busy until" has passed (their status flipped) or the list is old.
+    public func needsRefresh(now: Date = Date()) -> Bool {
+        now.timeIntervalSince(lastLoadedAt) >= Self.refreshInterval
+            || friends.contains { $0.statusChangesAt.map { $0 <= now } ?? false }
+    }
+
+    /// Keeps free/busy current for the session: checks locally every 30 s and refetches when `needsRefresh`.
+    /// Runs until cancelled.
+    public func keepFresh() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled, hasLoaded, needsRefresh() else { continue }
+            expireLapsed()
+            await load()
+        }
+    }
+
+    /// Drops free windows that have already closed, so a past "Free until" never lingers if a refetch fails.
+    public func expireLapsed(now: Date = Date()) {
+        for i in friends.indices where friends[i].freeNow {
+            if let until = friends[i].freeUntil, until <= now {
+                friends[i].freeNow = false
+                friends[i].freeUntil = nil
+            }
         }
     }
 
