@@ -1,6 +1,7 @@
 import { twoBots } from "./scenarios/two-bots.js";
 import { standIn } from "./scenarios/stand-in.js";
 import { appE2E } from "./scenarios/app-e2e.js";
+import { appClosed } from "./scenarios/app-closed.js";
 
 const [cmd, ...rest] = process.argv.slice(2);
 const flag = (name: string) => rest.includes(`--${name}`);
@@ -30,6 +31,11 @@ switch (cmd) {
     const run = value("run");
     if (!run) throw new Error("--run <id> is required");
     process.exit((await appE2E(run)) ? 0 : 1);
+  }
+  case "app-closed": {
+    const run = value("run"), udid = value("udid"), bundle = value("bundle");
+    if (!run || !udid || !bundle) throw new Error("--run, --udid and --bundle are required");
+    process.exit((await appClosed(run, udid, bundle)) ? 0 : 1);
   }
   default:
     console.log(`usage:

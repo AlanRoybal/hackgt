@@ -22,10 +22,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         AppModel.shared.didRegister(apnsToken: deviceToken)
     }
 
-    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+    // Completion-handler forms throughout: the Swift `async` forms of these delegate methods finish off the main
+    // thread, and UIKit asserts (SIGABRT) when the completion runs there — seen when Accept on a nudge
+    // notification launched the closed app (D-306).
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         nonisolated(unsafe) let info = userInfo
-        await AppModel.shared.handleBackgroundPush(info)
-        return .newData
+        nonisolated(unsafe) let done = completionHandler
+        Task { @MainActor in
+            await AppModel.shared.handleBackgroundPush(info)
+            done(.newData)
+        }
     }
 
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
@@ -35,45 +42,48 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // MARK: UNUserNotificationCenterDelegate
 
     /// Foreground: nudges get our own drop-down banner instead of the system one (NUD-9).
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let info = notification.request.content.userInfo
         let type = info["type"] as? String
         let nudgeId = info["nudgeId"] as? String
         let friendId = info["friendId"] as? String
-        return await MainActor.run {
+        nonisolated(unsafe) let done = completionHandler
+        Task { @MainActor in
             let app = AppModel.shared
             switch type.flatMap(PushKind.init(rawValue:)) {
             case .nudge:
                 if let nudgeId { Task { await app.nudges.present(nudgeId: nudgeId) } }
-                return []
+                done([])
             case .messageNew:
-                return app.openThreadId == friendId ? [] : [.banner, .sound, .list]
+                done(app.openThreadId == friendId ? [] : [.banner, .sound, .list])
             default:
-                return [.banner, .sound, .list]
+                done([.banner, .sound, .list])
             }
         }
     }
 
     /// Lock-screen actions (works after termination: iOS launches us in the background).
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let action = response.actionIdentifier
         let nudgeId = info["nudgeId"] as? String
         let friendId = info["friendId"] as? String
         let type = info["type"] as? String
-        await MainActor.run {
+        nonisolated(unsafe) let done = completionHandler
+        Task { @MainActor in
             let app = AppModel.shared
-            Task {
-                // Any notification interaction is a chance to refresh availability (AV-1).
-                async let sync: Void = app.availability.sync(reason: "notification action")
-                if type == PushKind.nudge.rawValue, let nudgeId {
-                    await app.nudges.handleNotificationAction(action, nudgeId: nudgeId)
-                } else if type == PushKind.messageNew.rawValue, let friendId {
-                    app.selectedTab = .messages
-                    app.openThreadId = friendId
-                }
-                await sync
+            // Any notification interaction is a chance to refresh availability (AV-1).
+            async let sync: Void = app.availability.sync(reason: "notification action")
+            if type == PushKind.nudge.rawValue, let nudgeId {
+                await app.nudges.handleNotificationAction(action, nudgeId: nudgeId)
+            } else if type == PushKind.messageNew.rawValue, let friendId {
+                app.selectedTab = .messages
+                app.openThreadId = friendId
             }
+            await sync
+            done()
         }
     }
 }

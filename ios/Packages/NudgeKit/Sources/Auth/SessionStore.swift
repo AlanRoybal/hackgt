@@ -22,7 +22,11 @@ public struct KeychainStore: Sendable {
         var add = base
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(add as CFDictionary, nil)
+        let status = SecItemAdd(add as CFDictionary, nil)
+        if status != errSecSuccess {
+            // -34018 (missing entitlement) means an unsigned build: the session won't survive a relaunch.
+            Logger(subsystem: "app.nudge", category: "session").error("keychain save failed: \(status, privacy: .public)")
+        }
     }
 
     public func load() -> Data? {
@@ -59,8 +63,14 @@ public final class SessionStore: TokenProvider {
     private var refreshTask: Task<String?, Never>?
     private let log = Logger(subsystem: "app.nudge", category: "session")
 
-    public init(keychain: KeychainStore = KeychainStore()) {
+    public init(keychain: KeychainStore = KeychainStore(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
+        // Keychain items outlive an uninstall; UserDefaults don't. A fresh install must not resume the
+        // previous install's session.
+        if !defaults.bool(forKey: "session.installMarker") {
+            keychain.clear()
+            defaults.set(true, forKey: "session.installMarker")
+        }
         if let data = keychain.load(), let s = try? NudgeJSON.decoder().decode(StoredSession.self, from: data) {
             stored = s
             userId = s.tokens.userId

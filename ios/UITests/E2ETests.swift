@@ -15,43 +15,8 @@ final class E2ETests: XCTestCase {
     }
 
     func testOnboardFriendMessageCallAndPhoto() throws {
-        // Welcome cards → sign-in screen.
-        for _ in 0..<4 where !app.textFields["test username"].exists {
-            let next = app.buttons["Get started"].exists ? app.buttons["Get started"] : app.buttons["Continue"]
-            if next.waitForExistence(timeout: 5) { next.tap() }
-        }
-        let user = app.textFields["test username"]
-        XCTAssert(user.waitForExistence(timeout: 10), "developer sign-in field")
-        user.tap()
-        user.typeText("e2e_\(run)")
-        app.buttons["Go"].tap()
-
-        // Terms → handle.
-        XCTAssert(app.buttons["I agree"].waitForExistence(timeout: 20), "Terms screen")
-        let handle = app.textFields["yourname"]
-        XCTAssert(tapUntil(app.buttons["I agree"], shows: handle), "handle screen")
-        handle.tap()
-        handle.typeText("e2e_\(run)")
-        let name = app.textFields["How friends see you"]
-        name.tap()
-        name.typeText("E2E User")
-        XCTAssert(app.staticTexts["@e2e_\(run) is available"].waitForExistence(timeout: 10), "handle availability check")
-        app.buttons["Continue"].tap()
-
-        // Phone (skip) → permission primers (Not now) → add your people (Done).
-        if app.buttons["Skip for now"].waitForExistence(timeout: 15) { app.buttons["Skip for now"].tap() }
-        while app.buttons["Not now"].waitForExistence(timeout: 4) { app.buttons["Not now"].tap() }
-        if app.buttons["Done"].waitForExistence(timeout: 10) { app.buttons["Done"].tap() }
-
-        // The bot finds the handle and sends a friend request.
-        let request = app.buttons["Test Bot wants to connect"]
-        XCTAssert(request.waitForExistence(timeout: 90), "friend request from the bot")
-        request.tap()
-        let accept = app.buttons["Accept"].firstMatch
-        XCTAssert(accept.waitForExistence(timeout: 10))
-        accept.tap()
-        if app.buttons["Done"].waitForExistence(timeout: 5) { app.buttons["Done"].tap() }
-        XCTAssert(app.staticTexts["Test Bot"].firstMatch.waitForExistence(timeout: 20), "bot in Friends")
+        try XCTSkipIf(ProcessInfo.processInfo.environment["E2E_SCENARIO"] == "app-closed", "run via ios-e2e.sh app-e2e")
+        try onboardAndAcceptBot()
 
         // The bot's message arrives.
         app.tabBars.buttons["Messages"].tap()
@@ -83,6 +48,114 @@ final class E2ETests: XCTestCase {
         app.buttons["End call"].tap()
         XCTAssert(app.staticTexts["You talked with Test Bot"].waitForExistence(timeout: 20), "summary screen")
         attach("summary")
+    }
+
+    /// Fresh user: dev sign-in → Terms → handle → skip phone/primers → accept the bot's friend request.
+    private func onboardAndAcceptBot(allowNotifications: Bool = false) throws {
+        // Welcome cards → sign-in screen.
+        for _ in 0..<4 where !app.textFields["test username"].exists {
+            let next = app.buttons["Get started"].exists ? app.buttons["Get started"] : app.buttons["Continue"]
+            if next.waitForExistence(timeout: 5) { next.tap() }
+        }
+        let user = app.textFields["test username"]
+        XCTAssert(user.waitForExistence(timeout: 10), "developer sign-in field")
+        user.tap()
+        user.typeText("e2e_\(run)")
+        app.buttons["Go"].tap()
+
+        // Terms → handle.
+        XCTAssert(app.buttons["I agree"].waitForExistence(timeout: 20), "Terms screen")
+        let handle = app.textFields["yourname"]
+        XCTAssert(tapUntil(app.buttons["I agree"], shows: handle), "handle screen")
+        handle.tap()
+        handle.typeText("e2e_\(run)")
+        let name = app.textFields["How friends see you"]
+        name.tap()
+        name.typeText("E2E User")
+        XCTAssert(app.staticTexts["@e2e_\(run) is available"].waitForExistence(timeout: 10), "handle availability check")
+        app.buttons["Continue"].tap()
+
+        // Phone (skip) → permission primers (Not now) → add your people (Done).
+        if app.buttons["Skip for now"].waitForExistence(timeout: 15) { app.buttons["Skip for now"].tap() }
+        if allowNotifications {
+            // A real user who wants nudges while the app is closed allows notifications and calendar access.
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            for primer in ["Get nudged at the right moment", "Know when you're free"] {
+                XCTAssert(app.staticTexts[primer].waitForExistence(timeout: 10), "primer: \(primer)")
+                app.buttons["Continue"].tap()
+                let allow = springboard.alerts.buttons.matching(NSPredicate(format: "label IN {'Allow', 'Allow Full Access', 'OK'}")).firstMatch
+                XCTAssert(allow.waitForExistence(timeout: 10), "system prompt for \(primer)")
+                allow.tap()
+            }
+        }
+        while app.buttons["Not now"].waitForExistence(timeout: 4) { app.buttons["Not now"].tap() }
+        if app.buttons["Done"].waitForExistence(timeout: 10) { app.buttons["Done"].tap() }
+
+        // The bot finds the handle and sends a friend request.
+        let request = app.buttons["Test Bot wants to connect"]
+        XCTAssert(request.waitForExistence(timeout: 90), "friend request from the bot")
+        request.tap()
+        let accept = app.buttons["Accept"].firstMatch
+        XCTAssert(accept.waitForExistence(timeout: 10))
+        accept.tap()
+        if app.buttons["Done"].waitForExistence(timeout: 5) { app.buttons["Done"].tap() }
+        XCTAssert(app.staticTexts["Test Bot"].firstMatch.waitForExistence(timeout: 20), "bot in Friends")
+
+    }
+
+    /// The scenario that matters most: you're out, the app is closed, a shared free window comes up.
+    /// The backend's real NUDGE push is delivered with the app terminated; Accept on the notification
+    /// launches the app into the waiting room, and the call connects when the friend accepts too.
+    func testNudgeArrivesWhileAppClosed() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["E2E_SCENARIO"] != "app-closed", "run via ios-e2e.sh app-closed")
+        try onboardAndAcceptBot(allowNotifications: true)
+        app.terminate()
+        XCTAssertEqual(app.state, .notRunning)
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let notification = springboard.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS 'Test Bot' AND label CONTAINS 'free'")).firstMatch
+        if !notification.waitForExistence(timeout: 90) {
+            // Banner already gone: it's in Notification Center.
+            springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.001))
+                .press(forDuration: 0.1, thenDragTo: springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.6)))
+            XCTAssert(notification.waitForExistence(timeout: 10), "nudge notification while the app is closed")
+        }
+        XCTAssertEqual(app.state, .notRunning, "the nudge arrived without the app running")
+        attachSpringboard(springboard, "nudge-notification-app-closed")
+
+        // Long-press shows Accept / Skip / See this less often.
+        notification.press(forDuration: 1.2)
+        let accept = springboard.buttons["Accept"]
+        XCTAssert(accept.waitForExistence(timeout: 10), "Accept action on the notification")
+        XCTAssert(springboard.buttons["Skip"].exists, "Skip action")
+        XCTAssert(springboard.buttons["See this less often"].exists, "See this less often action")
+        attachSpringboard(springboard, "nudge-actions")
+        accept.tap()
+
+        // Accept is a foreground action: the app launches into the waiting room, then the call.
+        XCTAssert(app.wait(for: .runningForeground, timeout: 20), "Accept opened the app")
+        let waiting = app.staticTexts["Waiting for Test Bot…"]
+        let miniWindow = app.otherElements["Your camera"]
+        XCTAssert(waiting.waitForExistence(timeout: 20) || miniWindow.exists, "waiting room after Accept")
+        attach("waiting-room-after-accept")
+        let springboardAlerts = springboard.alerts.buttons.matching(NSPredicate(format: "label IN {'Allow', 'OK'}"))
+        for _ in 0..<6 {
+            if miniWindow.exists, !springboard.alerts.firstMatch.exists { break }
+            if springboardAlerts.firstMatch.waitForExistence(timeout: 5) { springboardAlerts.firstMatch.tap() }
+        }
+        XCTAssert(miniWindow.waitForExistence(timeout: 40), "call connected after both accepted")
+        attach("call-after-notification-accept")
+        if !app.buttons["End call"].isHittable { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap() }
+        XCTAssert(app.buttons["End call"].waitForExistence(timeout: 5))
+        app.buttons["End call"].tap()
+    }
+
+    private func attachSpringboard(_ springboard: XCUIApplication, _ name: String) {
+        let a = XCTAttachment(screenshot: springboard.screenshot())
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
     }
 
     /// Taps (retrying while a transition settles) until `target` appears. Logs retries so real failures stay visible.

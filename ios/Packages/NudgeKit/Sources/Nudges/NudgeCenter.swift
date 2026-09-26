@@ -176,6 +176,8 @@ public final class NudgeCenter {
 
     /// Removes the delivered notification for a nudge that ended elsewhere.
     public nonisolated func removeDelivered(nudgeId: String) {
+        // UNUserNotificationCenter asserts outside an app/extension bundle (e.g. the package test runner).
+        guard ["app", "appex"].contains(Bundle.main.bundleURL.pathExtension) else { return }
         Task {
             let center = UNUserNotificationCenter.current()
             let notes = await center.deliveredNotifications()
