@@ -175,7 +175,16 @@ struct CallView: View {
             if let s = call.suggestion {
                 SuggestionCard(suggestion: s, peerName: call.peerName, isPreview: app.isPreview,
                                onShow: { call.showSuggestion(s) }, onDismiss: { call.dismissSuggestion(s) })
+                    .id(s.id)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                if !call.queuedSuggestions.isEmpty {
+                    Text("\(call.queuedSuggestions.count) more photo\(call.queuedSuggestions.count == 1 ? "" : "s") queued")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Palette.inkSecondary)
+                        .padding(.horizontal, Space.s)
+                        .padding(.vertical, Space.xs)
+                        .background(Palette.surface, in: Capsule())
+                }
             } else if let a = call.autoShown {
                 HidePill(name: call.peerName) { call.hideMine() }
                     .transition(.opacity)

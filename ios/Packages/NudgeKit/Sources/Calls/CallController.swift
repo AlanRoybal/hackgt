@@ -30,6 +30,7 @@ public final class CallController {
     public private(set) var hasRemoteVideo = false
     public private(set) var hasLocalVideo = false
     public var suggestion: PhotoSuggestion?
+    public private(set) var queuedSuggestions: [PhotoSuggestion] = []
     /// Automatic mode: "Showing to Mom · Hide" for 2 s.
     public private(set) var autoShown: PhotoSuggestion?
     public var error: String?
@@ -62,6 +63,7 @@ public final class CallController {
     private var transcriptBatcher: TranscriptBatcher?
     private var ownTranscribeRunning = false
     private var suggestionTimer: Task<Void, Never>?
+    private var autoShownTimer: Task<Void, Never>?
     private let log = Logger(subsystem: "app.nudge", category: "call")
 
     public var onEnded: ((_ callId: String, _ durationSec: Int) -> Void)?
@@ -205,8 +207,9 @@ public final class CallController {
         localTileId = nil
         remoteTileId = nil
         phase = .ended
-        suggestion = nil
+        clearSuggestions()
         autoShown = nil
+        autoShownTimer?.cancel()
         photos?.reset()
         // End the server meeting concurrently with transcription cleanup, not after it.
         async let serverEnd: Void = notifyServer ? endServerCall(callId) : ()
@@ -249,8 +252,7 @@ public final class CallController {
         transcriptBatcher = nil
         Task { await oldBatcher?.discard() }
         if muted {
-            suggestion = nil
-            suggestionTimer?.cancel()
+            clearSuggestions()
         }
     }
 
@@ -324,35 +326,66 @@ public final class CallController {
         photos = PhotoShareController(selfId: me, dependencies: deps)
     }
 
-    /// A `photo.suggestion` event from the backend (only the speaker receives these).
+    /// Suggestions wait in arrival order; a new result never replaces an unanswered card.
     public func receive(suggestion s: PhotoSuggestion) {
-        guard s.callId == callId, photoMode != .off, !isMuted else { return }
-        // The server marks partial-transcript suggestions as manual even in auto mode.
-        if s.auto && photoMode == .auto {
+        guard isActive, s.callId == callId, photoMode != .off, !isMuted else { return }
+        guard suggestion?.photoId != s.photoId,
+              !queuedSuggestions.contains(where: { $0.photoId == s.photoId || $0.id == s.id }) else { return }
+        // Do not let an automatic result jump ahead of an outstanding manual decision.
+        if s.auto && photoMode == .auto && suggestion == nil && queuedSuggestions.isEmpty {
             showSuggestion(s)
             autoShown = s
-            suggestionTimer?.cancel()
-            suggestionTimer = Task {
+            autoShownTimer?.cancel()
+            autoShownTimer = Task {
                 try? await Task.sleep(for: .seconds(2))
                 if !Task.isCancelled { autoShown = nil }
             }
         } else {
-            suggestion = s
-            suggestionTimer?.cancel()
-            suggestionTimer = Task {
-                try? await Task.sleep(for: .seconds(8))
-                if !Task.isCancelled, suggestion?.id == s.id { suggestion = nil }
-            }
+            // Bound the wait below thumbnail URL expiry; preserve the active card and oldest requests.
+            guard queuedSuggestions.count < 10 else { return }
+            queuedSuggestions.append(s)
+            presentNextSuggestion()
         }
     }
 
+    private func presentNextSuggestion() {
+        guard suggestion == nil, !queuedSuggestions.isEmpty, isActive, !isMuted, photoMode != .off else { return }
+        let next = queuedSuggestions.removeFirst()
+        suggestion = next
+        suggestionTimer?.cancel()
+        suggestionTimer = Task {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            advanceSuggestion(expectedID: next.id)
+        }
+    }
+
+    /// Shared by actions and expiry. An old timer or double tap cannot consume the next card.
+    func advanceSuggestion(expectedID: String) {
+        guard suggestion?.id == expectedID else { return }
+        suggestionTimer?.cancel()
+        suggestionTimer = nil
+        suggestion = nil
+        presentNextSuggestion()
+    }
+
+    private func clearSuggestions() {
+        suggestionTimer?.cancel()
+        suggestionTimer = nil
+        suggestion = nil
+        queuedSuggestions.removeAll()
+    }
+
     public func showSuggestion(_ s: PhotoSuggestion) {
-        if suggestion?.id == s.id { suggestion = nil }
+        guard isActive, !isMuted, s.callId == callId,
+              suggestion?.id == s.id || (s.auto && photoMode == .auto && suggestion == nil) else { return }
         photos?.share(OutgoingPhoto(photoId: s.photoId, suggestionId: s.suggestionId, image: .url(s.thumbUrl)))
+        advanceSuggestion(expectedID: s.id)
     }
 
     public func dismissSuggestion(_ dismissed: PhotoSuggestion) {
-        if suggestion?.id == dismissed.id { suggestion = nil }
+        guard suggestion?.id == dismissed.id else { return }
+        advanceSuggestion(expectedID: dismissed.id)
         Task { try? await api.dismissSuggestion(callId: dismissed.callId, suggestionId: dismissed.suggestionId) }
     }
 
