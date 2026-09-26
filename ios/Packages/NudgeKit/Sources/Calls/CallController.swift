@@ -122,6 +122,7 @@ public final class CallController {
                 try box.value.start(audioVideoConfiguration: configBox.value)
             }.value
             log.notice("join: Chime start returned")
+            routeAudioToSpeaker()
             try? session.audioVideo.startLocalVideo()
             session.audioVideo.startRemoteVideo()
             setUpPhotos(callId: callId)
@@ -200,6 +201,19 @@ public final class CallController {
     }
 
     public func flipCamera() { session?.audioVideo.switchCamera() }
+
+    /// Video calls should play through the loudspeaker while the person is looking at the screen.
+    /// Chime owns the audio-session category, so apply the route only after it has started it.
+    private func routeAudioToSpeaker() {
+        #if !targetEnvironment(simulator)
+        do {
+            try AVAudioSession.sharedInstance().overrideOutputAudioPort(.speaker)
+            log.notice("audio routed to speaker")
+        } catch {
+            log.error("couldn't route audio to speaker: \(String(describing: error), privacy: .public)")
+        }
+        #endif
+    }
 
     // MARK: Photos
 
@@ -339,6 +353,8 @@ public final class CallController {
     fileprivate func audioStarted(reconnecting: Bool) {
         phase = .connected
         if startedAt == nil { startedAt = Date() }
+        // Chime recreates its audio unit after a network reconnect, which resets this route.
+        routeAudioToSpeaker()
     }
 
     fileprivate func audioConnecting(reconnecting: Bool) {

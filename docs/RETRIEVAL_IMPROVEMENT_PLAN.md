@@ -95,3 +95,7 @@ Cosine similarity is a good recall stage. A small, bounded reasoning pass is bet
 ## Non-goal
 
 Do not replace Titan or add a GPU-hosted model until this improved pipeline is measured. If results remain weak after these steps, A/B test dedicated image-text embedding models on the same real evaluation set and select one based on accuracy, latency, cost, and operational complexity.
+
+## Backlog: make suggestions feel immediate
+
+Observed device testing shows roughly five seconds between a spoken reference and a card appearing. Before changing the pipeline, trace one real call end-to-end using the existing client and CloudWatch stage metrics: Transcribe finalization, transcript batching, detector, embedding/vector retrieval, Nova rerank, WebSocket delivery, and thumbnail fetch/render. Keep the accuracy guardrails above intact, then target the largest measured contributor. Likely candidates are reducing the 3-second transcript quiet window when speech has clearly ended, parallelizing independent retrieval requests, and displaying the suggestion shell before the thumbnail finishes downloading.
