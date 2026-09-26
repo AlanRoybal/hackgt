@@ -152,11 +152,14 @@ struct PhotoSelectorTests {
             AssetDescriptor(localIdentifier: "edge", creationDate: d(29.9)),
             AssetDescriptor(localIdentifier: "hidden", creationDate: d(1), isHidden: true),
             AssetDescriptor(localIdentifier: "shot", creationDate: d(1), isScreenshot: true),
-            AssetDescriptor(localIdentifier: "video", creationDate: d(1), isImage: false),
+            AssetDescriptor(localIdentifier: "other", creationDate: d(1), isImage: false),
+            AssetDescriptor(localIdentifier: "clip", creationDate: d(1), isImage: false, isVideo: true, duration: 12),
+            AssetDescriptor(localIdentifier: "long", creationDate: d(1), isImage: false, isVideo: true, duration: 31),
+            AssetDescriptor(localIdentifier: "oldclip", creationDate: d(31), isImage: false, isVideo: true, duration: 5),
             AssetDescriptor(localIdentifier: "nodate", creationDate: nil),
         ]
-        #expect(PhotoSelector.select(assets, includeScreenshots: false, now: now).map(\.localIdentifier) == ["recent", "edge"])
-        #expect(PhotoSelector.select(assets, includeScreenshots: true, now: now).map(\.localIdentifier) == ["recent", "edge", "shot"])
+        #expect(PhotoSelector.select(assets, includeScreenshots: false, now: now).map(\.localIdentifier) == ["recent", "edge", "clip"])
+        #expect(PhotoSelector.select(assets, includeScreenshots: true, now: now).map(\.localIdentifier) == ["recent", "edge", "shot", "clip"])
     }
 
     @Test func resizeNeverUpscales() {

@@ -170,7 +170,7 @@ struct SessionTests {
         var s = PhotoShareSession(selfId: "me")
         let offer = PhotoShareMessage(type: .offer, seq: 4, shareId: "s9", senderId: "them", durationMs: 4500, queueIndex: 1, queueLength: 3)
         var fx = s.handle(.received(.init(message: offer, timestampMs: 100)), now: at(0))
-        #expect(fx == [.fetch(shareId: "s9", senderId: "them")])
+        #expect(fx == [.fetch(shareId: "s9", senderId: "them", isVideo: false)])
         fx = s.handle(.incomingLoaded(shareId: "s9", image: .placeholder("x")), now: at(0.3))
         #expect(sends(fx) == [PhotoShareMessage(type: .ready, seq: 4, shareId: "s9", senderId: "me")])
         guard case .other(let p) = s.display(now: at(0.3)) else { Issue.record("expected other"); return }
@@ -239,5 +239,66 @@ struct SessionTests {
         #expect(sends(fx).map(\.type) == [.cancel])
         #expect(fx.contains(.markShown(shareId: "s1", shownAt: at(1.5), durationMs: 2000)))
         #expect(s.display(now: at(3.5)) == .selfView)
+    }
+}
+
+@Suite("Video shares — VID-3/4")
+struct VideoShareTests {
+    func sends(_ effects: [PhotoShareSession.Effect]) -> [PhotoShareMessage] {
+        effects.compactMap { if case .send(let m) = $0 { m } else { nil } }
+    }
+
+    private func clip(_ id: String, ms: Int?) -> OutgoingPhoto {
+        OutgoingPhoto(photoId: id, suggestionId: nil, image: .video(URL(string: "https://x/\(id).mp4")!, poster: nil), videoMs: ms)
+    }
+
+    @Test func durationFollowsTheClip() {
+        #expect(PhotoTiming.durationMs(videoMs: 4200) == 4200 + PhotoTiming.videoTailMs)
+        #expect(PhotoTiming.durationMs(videoMs: 90_000) == PhotoTiming.maxVideoMs + PhotoTiming.videoTailMs)
+        #expect(PhotoTiming.durationMs(videoMs: 200) == 1000 + PhotoTiming.videoTailMs)
+    }
+
+    @Test func senderOffersVideoWithClipLengthEvenWhenQueued() throws {
+        var s = PhotoShareSession(selfId: "me")
+        _ = s.handle(.share(clip("v1", ms: 12_000)), now: at(0))
+        _ = s.handle(.share(photo("p2")), now: at(0))
+        _ = s.handle(.share(photo("p3")), now: at(0))
+        let fx = s.handle(.shareCreated(photoId: "v1", shareId: "s1"), now: at(0.1))
+        let offer = try #require(sends(fx).first)
+        #expect(offer.media == .video)
+        #expect(offer.durationMs == 12_000 + PhotoTiming.videoTailMs)
+        // The photo behind it still gets the shortened burst timing.
+        _ = s.handle(.tick, now: at(1.7))
+        let next = s.handle(.tick, now: at(14.2))
+        #expect(next.contains(.createShare(photo("p2"))))
+        let p2 = try #require(sends(s.handle(.shareCreated(photoId: "p2", shareId: "s2"), now: at(14.2))).first)
+        #expect(p2.media == nil && p2.durationMs == 4500)
+    }
+
+    @Test func recipientFetchesVideoAndDissolvesAtClipEnd() {
+        var s = PhotoShareSession(selfId: "me")
+        let offer = PhotoShareMessage(type: .offer, seq: 1, shareId: "s1", senderId: "them", durationMs: 5400, media: .video)
+        #expect(s.handle(.received(.init(message: offer, timestampMs: 1)), now: at(0)) == [.fetch(shareId: "s1", senderId: "them", isVideo: true)])
+        let file = URL(fileURLWithPath: "/tmp/s1.mp4")
+        _ = s.handle(.incomingLoaded(shareId: "s1", image: .video(file, poster: nil)), now: at(2))
+        #expect(s.display(now: at(2)).photo?.image == .video(file, poster: nil))
+        _ = s.handle(.tick, now: at(7.3))
+        #expect(s.display(now: at(7.3)).photo != nil)
+        _ = s.handle(.tick, now: at(7.45))
+        #expect(s.display(now: at(7.45)) == .selfView)
+    }
+
+    @Test func recipientCapsAPeersDuration() {
+        var s = PhotoShareSession(selfId: "me")
+        let offer = PhotoShareMessage(type: .offer, seq: 1, shareId: "s1", senderId: "them", durationMs: 600_000, media: .video)
+        _ = s.handle(.received(.init(message: offer, timestampMs: 1)), now: at(0))
+        #expect(s.incoming?.durationMs == PhotoTiming.durationMs(videoMs: PhotoTiming.maxVideoMs))
+    }
+
+    @Test func mediaFieldIsOptionalOnTheWire() throws {
+        let old = #"{"v":1,"type":"offer","seq":1,"shareId":"s","senderId":"a","durationMs":6000}"#
+        #expect(try PhotoShareMessage.decode(Data(old.utf8)).media == nil)
+        let m = PhotoShareMessage(type: .offer, seq: 1, shareId: "s", senderId: "a", durationMs: 9000, media: .video)
+        #expect(try PhotoShareMessage.decode(m.encoded()) == m)
     }
 }

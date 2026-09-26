@@ -121,6 +121,13 @@ Verification tags used below: **[U]** unit test · **[I]** backend integration t
 **REF-10 Latency.** Utterance end → chip p50 ≤ 2.5 s, p95 ≤ 4 s; Show → visible both p95 ≤ 800 ms. Every stage timestamped. [I/B measured, reported]
 **REF-11 Audit.** Every shown photo is logged under the call. [I]
 
+### 1.6a Short videos (VID)
+
+**VID-1 Indexed like photos.** Videos of 30 s or less from the last 30 days are indexed alongside photos, under the same rules (hidden never, screenshots-setting n/a, expiry, delete). Each uploads a poster JPEG (1024 px) to `photos/<userId>/<hash>.jpg` and a 540p MP4 to `photos/<userId>/<hash>.mp4`. [U selection] [U backend validation]
+**VID-2 Video indexing.** Indexing starts once both files exist. The poster frame goes through PHO-2 safety; Nova Lite then captions the whole clip and flags sensitive content (flagged → excluded). The poster frame is embedded in `photos`; the clip caption in `photo-captions`. Vector metadata carries `mediaType: "video"`. [U parsing] [I]
+**VID-3 Suggest and share.** Retrieval is unchanged; a video match arrives as a `photo.suggestion` with `mediaType`, `durationMs` and `videoUrl`. The card shows the poster with a play badge and a Play button. [S]
+**VID-4 Play then dissipate.** A shared video fills the stage and plays once, muted, on both phones, starting at `ready` (the recipient downloads the whole clip first). It stays up for its own length (+0.4 s), regardless of the queue, then blurs and fades out and the call view returns. The sender can swipe it away early, as with photos. [U] [2P]
+
 ### 1.7 Memory (MEM)
 
 **MEM-1 Transcript retention.** Segments are stored with a 24 h TTL and deleted as soon as the summary is saved. [I]
@@ -202,11 +209,11 @@ Frequency counters are kept on the User item (`recentNudgeAts`, `lastNudgeAt`) a
 
 ### 3.2 S3
 
-Bucket `nudge-media-<stage>-<account>`: `photos/<userId>/<assetHash>.jpg` (lifecycle expire 31 d), `avatars/<userId>.jpg`, private, SSE-S3, CORS off, event notification on `photos/` → index pipeline.
+Bucket `nudge-media-<stage>-<account>`: `photos/<userId>/<assetHash>.jpg` and, for videos, `photos/<userId>/<assetHash>.mp4` (lifecycle expire 31 d), `avatars/<userId>.jpg`, private, SSE-S3, CORS off, event notification on `photos/` → index pipeline.
 
 ### 3.3 S3 Vectors
 
-Vector bucket `nudge-vectors-<stage>`, index `photos` (dimension 1024, cosine, float32). Key `<userId>#<assetHash>`. Filterable metadata: `userId` (string), `takenAt` (number, epoch seconds), `place` (string). Non-filterable: `caption`. Fallback (see DECISIONS) documented.
+Vector bucket `nudge-vectors-<stage>`, index `photos` (dimension 1024, cosine, float32). Key `<userId>#<assetHash>`. Filterable metadata: `userId` (string), `takenAt` (number, epoch seconds), `place` (string). Non-filterable: `caption`, `mediaType` (`"video"` only on videos). Fallback (see DECISIONS) documented.
 
 ### 3.4 Swift client models (`NudgeKit/Models`)
 
@@ -346,16 +353,16 @@ AuthTokens   { accessToken, idToken, refreshToken?, expiresIn, userId, isNew }
 | GET `/calls/{id}/join` | — | `CallJoin` |
 | POST `/calls/{id}/end` | — | 204 |
 | GET `/calls/{id}/summary` | — | `CallSummary` · 202 `{pending:true}` |
-| POST `/calls/{id}/shares` | `{ photoId, suggestionId? }` | `{ shareId, thumbUrl }` |
+| POST `/calls/{id}/shares` | `{ photoId, suggestionId? }` | `{ shareId, thumbUrl, mediaType?, durationMs?, videoUrl? }` |
 | POST `/calls/{id}/suggestions/{suggestionId}/feedback` | `{ outcome: "dismissed" }` | 204 |
-| GET `/calls/{id}/shares/{shareId}` | — | `{ url, expiresAt }` (recipient only; presigned 5 min) |
+| GET `/calls/{id}/shares/{shareId}` | — | `{ url, expiresAt, mediaType?, durationMs?, videoUrl? }` (recipient only; presigned 5 min; `url` is a video's poster) |
 | POST `/calls/{id}/shares/{shareId}/shown` | `{ shownAt, durationMs }` | 204 |
 
 **Photos & transcription**
 
 | Method & path | Body | Response |
 |---|---|---|
-| POST `/photos/uploads` | `{ items: [{assetHash, takenAt, place?, isScreenshot, width, height}] }` (≤ 50) | `{ uploads: [{assetHash, uploadUrl}], skipped: string[] }` |
+| POST `/photos/uploads` | `{ items: [{assetHash, takenAt, place?, isScreenshot, width, height, mediaType?: "video", durationMs?}] }` (≤ 50; videos ≤ 30 s) | `{ uploads: [{assetHash, uploadUrl, videoUploadUrl?}], skipped: string[] }` (`videoUploadUrl` is presigned for `video/mp4`, 1 h) |
 | GET `/photos/status` | — | `PhotoStatus` |
 | DELETE `/photos/{assetHash}` · DELETE `/photos` | — | 204 |
 | GET `/transcribe/config` | — | `{ identityPoolId, region, userPoolProviderName }` |
@@ -381,7 +388,7 @@ Server → client (`type` discriminator):
 { "type": "message.new", "friendId": "u_…", "message": Message }
 { "type": "friend.request", "user": PublicUser }
 { "type": "friend.accepted", "user": PublicUser }
-{ "type": "photo.suggestion", "callId", "suggestionId", "photoId", "thumbUrl", "query", "confidence", "auto": false }
+{ "type": "photo.suggestion", "callId", "suggestionId", "photoId", "thumbUrl", "query", "confidence", "auto": false, "mediaType"?: "video", "durationMs"?, "videoUrl"? }
 { "type": "call.summary.ready", "callId", "friendId" }
 { "type": "pong" }
 ```
@@ -410,11 +417,12 @@ Notification categories: `NUDGE` actions `ACCEPT` (foreground), `SKIP`, `LESS`; 
 
 ```json
 { "v": 1, "type": "offer",  "seq": 7, "shareId": "s_…", "senderId": "u_…", "durationMs": 6000, "queueIndex": 0, "queueLength": 1 }
+{ "v": 1, "type": "offer",  "seq": 8, "shareId": "s_…", "senderId": "u_…", "durationMs": 12400, "queueIndex": 1, "queueLength": 2, "media": "video" }
 { "v": 1, "type": "ready",  "seq": 7, "shareId": "s_…", "senderId": "<recipient>" }
 { "v": 1, "type": "end",    "seq": 7, "shareId": "s_…", "senderId": "u_…" }
 { "v": 1, "type": "cancel", "seq": 7, "shareId": "s_…", "senderId": "u_…" }
 ```
-Order by Chime `timestampMs`, tiebreak `senderId`. Durations: queueLength 1 → 6000, 2 → 4500, ≥ 3 → 3500. The photo is shown from the `ready` moment for `durationMs` on both ends.
+Order by Chime `timestampMs`, tiebreak `senderId`. Durations: queueLength 1 → 6000, 2 → 4500, ≥ 3 → 3500. The photo is shown from the `ready` moment for `durationMs` on both ends. A video offer (`media: "video"`) uses its clip length + 400 ms instead, capped at 30.4 s by the recipient; `media` absent means photo, so older apps show the poster frame.
 
 ---
 

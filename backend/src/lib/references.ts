@@ -1,4 +1,4 @@
-// Transcript segment → detector → retrieval → photo.suggestion (SPEC REF-1..6, REF-10).
+// Transcript segment → detector → retrieval → photo.suggestion for a photo or short video (SPEC REF-1..6, REF-10, VID-3).
 import { detectReference, retrievalQueries } from '../ai/detector.js';
 import { embedText } from '../ai/embed.js';
 import { rerankPhotos } from '../ai/rerank.js';
@@ -6,6 +6,7 @@ import { get, put, query, queryPrefix, del, isConditionalFailure } from './db.js
 import { env } from './env.js';
 import { getCall } from './flows.js';
 import { K, newId, segSk } from './keys.js';
+import { mediaTypeOf } from './media.js';
 import { emitLatency, stopwatch } from './metrics.js';
 import { presignGet } from './s3.js';
 import { getUser } from './users.js';
@@ -262,6 +263,7 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   if (!photo || photo.status !== 'indexed') return { stored: true, detection };
   const suggestionId = newId('g');
   const thumbUrl = await presignGet(photo.s3Key, 300);
+  const video = mediaTypeOf(photo) === 'video';
   const auto = user.settings.photoMode === 'auto' && !input.isPartial;
   await sendToUser(userId, {
     type: 'photo.suggestion',
@@ -269,6 +271,8 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     suggestionId,
     photoId,
     thumbUrl,
+    // A video's thumb is its poster frame; the speaker's phone plays the clip from `videoUrl` (VID-3).
+    ...(video ? { mediaType: 'video', durationMs: photo.durationMs, videoUrl: await presignGet(photo.videoKey, 300) } : {}),
     query: detection.query,
     confidence: detection.confidence,
     auto,

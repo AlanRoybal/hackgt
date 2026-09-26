@@ -170,6 +170,7 @@ public final class CallController {
         suggestion = nil
         autoShown = nil
         photos?.reset()
+        try? FileManager.default.removeItem(at: Self.clipDirectory)
         await stopTranscription()
         if let session {
             session.audioVideo.stopLocalVideo()
@@ -225,10 +226,14 @@ public final class CallController {
             createShare: { photoId, suggestionId in
                 try await api.createShare(callId: callId, photoId: photoId, suggestionId: suggestionId).shareId
             },
-            fetchImage: { shareId in
-                let url = try await api.shareURL(callId: callId, shareId: shareId).url
-                let (data, _) = try await URLSession.shared.data(from: url)
-                return data
+            fetchMedia: { shareId, isVideo in
+                let share = try await api.shareURL(callId: callId, shareId: shareId)
+                if isVideo, let videoUrl = share.videoUrl {
+                    // Download the whole clip before `ready` so both phones start it together.
+                    return .video(try await Self.downloadClip(videoUrl, shareId: shareId), poster: share.url)
+                }
+                let (data, _) = try await URLSession.shared.data(from: share.url)
+                return .data(data)
             },
             send: { data in
                 try await MainActor.run {
@@ -266,7 +271,25 @@ public final class CallController {
 
     public func showSuggestion(_ s: PhotoSuggestion) {
         if suggestion?.id == s.id { suggestion = nil }
-        photos?.share(OutgoingPhoto(photoId: s.photoId, suggestionId: s.suggestionId, image: .url(s.thumbUrl)))
+        if s.isVideo, let videoUrl = s.videoUrl {
+            photos?.share(OutgoingPhoto(photoId: s.photoId, suggestionId: s.suggestionId,
+                                        image: .video(videoUrl, poster: s.thumbUrl), videoMs: s.durationMs))
+        } else {
+            photos?.share(OutgoingPhoto(photoId: s.photoId, suggestionId: s.suggestionId, image: .url(s.thumbUrl)))
+        }
+    }
+
+    /// Received clips live only for the call; `end` clears the folder.
+    nonisolated static let clipDirectory = FileManager.default.temporaryDirectory.appending(path: "shared-clips", directoryHint: .isDirectory)
+
+    nonisolated static func downloadClip(_ url: URL, shareId: String) async throws -> URL {
+        let (tmp, response) = try await URLSession.shared.download(from: url)
+        guard (response as? HTTPURLResponse)?.statusCode ?? 200 < 300 else { throw URLError(.badServerResponse) }
+        try FileManager.default.createDirectory(at: clipDirectory, withIntermediateDirectories: true)
+        let dest = clipDirectory.appending(path: "\(shareId).mp4")
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.moveItem(at: tmp, to: dest)
+        return dest
     }
 
     public func dismissSuggestion(_ dismissed: PhotoSuggestion) {
@@ -408,7 +431,7 @@ public final class CallController {
         self.suggestion = suggestion
         self.autoShown = autoShown
         self.startedAt = Date().addingTimeInterval(-754)
-        let deps = PhotoShareController.Dependencies(createShare: { _, _ in "" }, fetchImage: { _ in Data() }, send: { _ in }, markShown: { _, _, _ in })
+        let deps = PhotoShareController.Dependencies(createShare: { _, _ in "" }, fetchMedia: { _, _ in .data(Data()) }, send: { _ in }, markShown: { _, _, _ in })
         let pc = PhotoShareController(selfId: "me", dependencies: deps)
         pc.previewDisplay(display)
         photos = pc

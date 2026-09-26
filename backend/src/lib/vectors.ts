@@ -17,12 +17,14 @@ export interface PhotoVectorMeta {
   takenAt: number; // epoch seconds
   place?: string;
   caption?: string;
+  mediaType?: 'photo' | 'video';
 }
 
 export async function putPhotoVector(key: string, data: number[], meta: PhotoVectorMeta, index = env.vectorIndex) {
   const metadata: Record<string, string | number> = { userId: meta.userId, takenAt: meta.takenAt };
   if (meta.place) metadata.place = meta.place;
   if (meta.caption) metadata.caption = meta.caption.slice(0, 500);
+  if (meta.mediaType === 'video') metadata.mediaType = 'video';
   await client.send(
     new PutVectorsCommand({
       vectorBucketName: env.vectorBucket,

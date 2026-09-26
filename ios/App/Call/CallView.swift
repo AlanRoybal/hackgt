@@ -15,6 +15,8 @@ struct CallView: View {
     /// Drag on my own shared photo. While it's non-zero the remote video sits under the photo (and the mini window
     /// goes back to my camera), so swiping the photo away uncovers the normal call.
     @State private var photoSwipe: CGSize = .zero
+    /// Whether the last shared item was a video, so its exit uses the slower dissolve.
+    @State private var lastWasVideo = false
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
@@ -109,12 +111,13 @@ struct CallView: View {
                             withAnimation(Motion.resolved(Motion.snap, reduceMotion: reduceMotion)) { photoSwipe = .zero }
                         }
                     }
-                    .transition(.opacity)
+                    .transition(.sharedStage(isVideo: p.image.isVideo, reduceMotion: reduceMotion))
                     .id(p.shareId)
                     .accessibilityAction(named: "Stop showing") { if isMine { call.hideMine() } }
             }
         }
-        .animation(Motion.resolved(Motion.photoSwap, reduceMotion: reduceMotion), value: display)
+        .animation(Motion.resolved(display.photo == nil && lastWasVideo ? Motion.dissipate : Motion.photoSwap, reduceMotion: reduceMotion), value: display)
+        .onChange(of: display.photo) { _, p in if let p { lastWasVideo = p.image.isVideo } }
         .onChange(of: display.photo?.shareId) { photoSwipe = .zero }
     }
 

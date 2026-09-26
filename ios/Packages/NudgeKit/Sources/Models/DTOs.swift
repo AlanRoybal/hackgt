@@ -520,6 +520,8 @@ public struct CallJoin: Codable, Sendable, Hashable {
 
 public struct PhotoStatus: Codable, Sendable, Hashable {
     public var indexed: Int
+    /// How many of `indexed` are short videos.
+    public var videos: Int?
     public var excluded: Int
     public var pending: Int
     public var failed: Int
@@ -616,6 +618,11 @@ public struct DeviceRegistration: Codable, Sendable, Hashable {
     }
 }
 
+/// Whether an indexed item is a still photo or a short video (VID-1).
+public enum MediaType: String, Codable, Sendable, Hashable {
+    case photo, video
+}
+
 public struct PhotoUploadItem: Codable, Sendable, Hashable {
     public var assetHash: String
     public var takenAt: Date
@@ -623,20 +630,28 @@ public struct PhotoUploadItem: Codable, Sendable, Hashable {
     public var isScreenshot: Bool
     public var width: Int
     public var height: Int
+    public var mediaType: MediaType?
+    public var durationMs: Int?
 
-    public init(assetHash: String, takenAt: Date, place: String?, isScreenshot: Bool, width: Int, height: Int) {
+    public init(assetHash: String, takenAt: Date, place: String?, isScreenshot: Bool, width: Int, height: Int,
+                mediaType: MediaType? = nil, durationMs: Int? = nil) {
         self.assetHash = assetHash
         self.takenAt = takenAt
         self.place = place
         self.isScreenshot = isScreenshot
         self.width = width
         self.height = height
+        self.mediaType = mediaType
+        self.durationMs = durationMs
     }
 }
 
 public struct PhotoUploadTicket: Codable, Sendable, Hashable {
     public var assetHash: String
+    /// The JPEG (a video's poster frame).
     public var uploadUrl: URL
+    /// The MP4, for videos only.
+    public var videoUploadUrl: URL?
 }
 
 public struct PhotoUploadsResponse: Codable, Sendable, Hashable {
@@ -652,10 +667,16 @@ public struct PhotoSuggestion: Codable, Sendable, Hashable, Identifiable {
     public var query: String
     public var confidence: Double
     public var auto: Bool
+    /// Set for a short video: `thumbUrl` is its poster frame and `videoUrl` the clip (5-minute link).
+    public var mediaType: MediaType?
+    public var durationMs: Int?
+    public var videoUrl: URL?
 
     public var id: String { suggestionId }
+    public var isVideo: Bool { mediaType == .video && videoUrl != nil }
 
-    public init(callId: String, suggestionId: String, photoId: String, thumbUrl: URL, query: String, confidence: Double, auto: Bool) {
+    public init(callId: String, suggestionId: String, photoId: String, thumbUrl: URL, query: String, confidence: Double, auto: Bool,
+                mediaType: MediaType? = nil, durationMs: Int? = nil, videoUrl: URL? = nil) {
         self.callId = callId
         self.suggestionId = suggestionId
         self.photoId = photoId
@@ -663,12 +684,18 @@ public struct PhotoSuggestion: Codable, Sendable, Hashable, Identifiable {
         self.query = query
         self.confidence = confidence
         self.auto = auto
+        self.mediaType = mediaType
+        self.durationMs = durationMs
+        self.videoUrl = videoUrl
     }
 }
 
 public struct ShareCreated: Codable, Sendable, Hashable {
     public var shareId: String
     public var thumbUrl: URL
+    public var mediaType: MediaType?
+    public var durationMs: Int?
+    public var videoUrl: URL?
 }
 
 /// A photo either person showed during a call, for the post-call recap. `url` expires after 5 minutes.
@@ -677,20 +704,30 @@ public struct CallPhoto: Codable, Sendable, Hashable, Identifiable {
     public var senderId: String
     public var url: URL
     public var createdAt: Date
+    /// Set for a short video: `url` is its poster frame and `videoUrl` the clip.
+    public var mediaType: MediaType?
+    public var videoUrl: URL?
 
     public var id: String { shareId }
+    public var isVideo: Bool { mediaType == .video }
 
-    public init(shareId: String, senderId: String, url: URL, createdAt: Date) {
+    public init(shareId: String, senderId: String, url: URL, createdAt: Date, mediaType: MediaType? = nil, videoUrl: URL? = nil) {
         self.shareId = shareId
         self.senderId = senderId
         self.url = url
         self.createdAt = createdAt
+        self.mediaType = mediaType
+        self.videoUrl = videoUrl
     }
 }
 
 public struct ShareURL: Codable, Sendable, Hashable {
+    /// The still image (a video's poster frame).
     public var url: URL
     public var expiresAt: Date
+    public var mediaType: MediaType?
+    public var durationMs: Int?
+    public var videoUrl: URL?
 }
 
 public struct HandleAvailability: Codable, Sendable, Hashable {

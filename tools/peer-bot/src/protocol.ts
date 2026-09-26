@@ -12,6 +12,8 @@ export interface PhotoMessage {
   durationMs?: number;
   queueIndex?: number;
   queueLength?: number;
+  /** Absent means photo. A video offer's `durationMs` is the clip length; its share `url` is the poster frame. */
+  media?: "photo" | "video";
 }
 
 export interface ActivePhoto {
