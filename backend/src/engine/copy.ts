@@ -10,15 +10,16 @@ export function durationPhrase(minutes: number, withNext: boolean): string {
 export function nudgeCopy(name: string, minutes: number, topicTitle?: string): { title: string; body: string } {
   const title = `${name} is free too`;
   if (topicTitle) {
-    return { title, body: `You and ${name} are both free for ${durationPhrase(minutes, false)}. Want to follow up about ${topicTitle}?` };
+    return { title, body: `You and ${name} are both free for ${durationPhrase(minutes, false)}. Want to follow up on ${topicTitle}?` };
   }
   return { title, body: `You and ${name} are both free for ${durationPhrase(minutes, true)}. Call?` };
 }
 
 /** Copy for a direct "Call now" request. */
-export function directCopy(recipientSeesName: string, callerSeesName: string) {
+export function directCopy(recipientSeesName: string, callerSeesName: string, topicTitle?: string) {
+  const ask = topicTitle ? `Free to follow up on ${topicTitle}?` : 'Free?';
   return {
-    recipient: { title: `${recipientSeesName} wants to call`, body: `${recipientSeesName} wants to call. Free?` },
+    recipient: { title: `${recipientSeesName} wants to call`, body: `${recipientSeesName} wants to call. ${ask}` },
     caller: { title: `Calling ${callerSeesName}`, body: `Waiting for ${callerSeesName}…` },
   };
 }

@@ -22,7 +22,7 @@ Rules:
 - Topics are upcoming or ongoing events in someone's life worth asking about later (exam, interview, trip, move, doctor visit, game, recital, new job). 0 to 3 topics. Skip small talk.
 - followUpAfter: the day after the event if a date or relative day is mentioned (resolve against TODAY); otherwise 3 days after TODAY for ongoing things; null if not worth a follow-up.
 - In "summary" and each topic's "summary", call the people by the names given (NAMES), never "A" or "B".
-- Never include sensitive details (health specifics, money amounts, passwords). Keep titles short enough to fit "Want to follow up about <title>?".`;
+- Never include sensitive details (health specifics, money amounts, passwords). Keep titles short enough to fit "Want to follow up on <title>?".`;
 
 export async function summarizeCall(
   lines: { who: 'A' | 'B'; text: string }[],

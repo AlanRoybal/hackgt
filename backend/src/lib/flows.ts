@@ -1,8 +1,10 @@
 // Nudge + call orchestration: state transitions, their side effects, and DTOs.
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { followUpMessage } from '../ai/followup.js';
+import { directCopy } from '../engine/copy.js';
 import { stepDown } from '../engine/frequency.js';
 import { isTerminal, transition, type Effect, type NudgeEvent } from '../engine/state.js';
+import { pickTopic, type TopicLike } from '../engine/topics.js';
 import type { NudgeResponse, NudgeState } from '../engine/types.js';
 import { createMeeting, deleteMeeting, startTranscription } from './chime.js';
 import { get, isConditionalFailure, put, queryPrefix, update } from './db.js';
@@ -73,6 +75,11 @@ export async function getCall(id: string): Promise<CallItem> {
   const c = await get<CallItem>(K.call(id));
   if (!c) throw notFound('call_not_found');
   return c;
+}
+
+/** The shared memory a nudge for this pair should mention, if any. */
+export async function topicFor(pk: string, now: number) {
+  return pickTopic((await queryPrefix(`PAIR#${pk}`, 'TOPIC#')) as TopicLike[], now);
 }
 
 export async function enqueueDelay(body: { kind: 'precheck' | 'expire'; nudgeId: string }, delaySeconds: number) {
@@ -170,6 +177,16 @@ async function runEffect(n: NudgeItem, eff: Effect, actorId?: string): Promise<N
       return createCallForNudge(n, actorId);
     case 'cleanup':
       await releaseUsers(n);
+      // Nobody called about it: offer the topic again next time.
+      if (n.topicId && !n.callId) {
+        await update(K.topic(n.pairKey, n.topicId), { status: 'open', suggestedAt: undefined }, {
+          condition: '#s = :s',
+          names: { '#s': 'status' },
+          values: { ':s': 'suggested' },
+        }).catch((e) => {
+          if (!isConditionalFailure(e)) throw e;
+        });
+      }
       await Promise.all(n.participants.map((u) => pushToUser(u, 'background', payloads.background('nudge.cleanup', n.id))));
       return;
     case 'missed_event': {
@@ -242,6 +259,8 @@ async function createCallForNudge(n: NudgeItem, actorId?: string): Promise<Nudge
   };
   await put(call);
   const updated = (await update(K.nudge(n.id), { callId })) as NudgeItem;
+  // Both accepted a nudge that named this topic: it's been followed up on, so don't suggest it again.
+  if (n.topicId) await update(K.topic(n.pairKey, n.topicId), { status: 'used', usedAt: now }).catch(() => {});
   const busyUntil = new Date(Date.now() + CALL_BUSY_MS).toISOString();
   await Promise.all(n.participants.map((u) => update(K.user(u), { activeCallId: callId, activeNudgeId: n.id, busyUntil })));
   await notifyMatched(updated, callId, users, actorId);
@@ -332,6 +351,8 @@ export async function createDirectNudge(callerId: string, friendId: string): Pro
   const createdAt = new Date(now).toISOString();
   const expiresAt = new Date(now + NUDGE_TTL_S * 1000).toISOString();
   const pk = pairKey(callerId, friendId);
+  const topic = await topicFor(pk, now);
+  const copy = directCopy(recipientSees, callerSees, topic?.title);
   const n: NudgeItem = {
     ...K.nudge(id),
     id,
@@ -341,10 +362,9 @@ export async function createDirectNudge(callerId: string, friendId: string): Pro
     initiatorId: callerId,
     window: { start: createdAt, end: expiresAt },
     minutes: 0,
-    copyByUser: {
-      [friendId]: { title: `${recipientSees} wants to call`, body: `${recipientSees} wants to call. Free?` },
-      [callerId]: { title: `Calling ${callerSees}`, body: `Waiting for ${callerSees}…` },
-    },
+    copyByUser: { [friendId]: copy.recipient, [callerId]: copy.caller },
+    topicId: topic?.id,
+    topicTitle: topic?.title,
     state: 'accepted_by_one',
     responses: { [callerId]: 'accepted' },
     sentAt: createdAt,
@@ -356,6 +376,7 @@ export async function createDirectNudge(callerId: string, friendId: string): Pro
     gsi1sk: `NUDGE#${createdAt}`,
   };
   await put(n);
+  if (topic) await update(K.topic(pk, topic.id), { status: 'suggested', suggestedAt: createdAt }).catch(() => {});
   // The caller is looking at the waiting room: mark their sockets now so a fast accept can't beat the client's
   // own `waiting` message and ring them over VoIP instead of sending call.matched.
   const callerConns = await connectionsFor(callerId);

@@ -128,10 +128,12 @@ describe('memory', () => {
     });
     const n = await a.req('GET', `/nudges/${r.created[0]}`);
     expect(n.topic?.id).toBeDefined();
-    expect(n.body).toMatch(/^You and Mom are both free for .+\. Want to follow up about .+\?$/);
+    expect(n.body).toMatch(/^You and Mom are both free for .+\. Want to follow up on .+\?$/);
     // Accept both → call → end → the suggested topic becomes used.
     await a.req('POST', `/nudges/${n.id}/respond`, { action: 'accept' });
     const m = await b.req('POST', `/nudges/${n.id}/respond`, { action: 'accept' });
+    // Accepting the nudge is enough to mark its topic used.
+    expect((await a.req('GET', `/friends/${b.id}/memories`)).topics.find((t: any) => t.id === n.topic.id).status).toBe('used');
     await a.req('POST', `/calls/${m.callId}/end`);
     const after = (await a.req('GET', `/friends/${b.id}/memories`)).topics.find((t: any) => t.id === n.topic.id);
     expect(after.status).toBe('used');
