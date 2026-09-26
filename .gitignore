@@ -11,3 +11,9 @@ DerivedData/
 xcuserdata/
 tools/**/node_modules/
 evals/**/out/
+
+# SwiftPM / Xcode
+.build/
+.swiftpm/
+Package.resolved.bak
+__pycache__/

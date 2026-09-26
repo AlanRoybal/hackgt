@@ -1,0 +1,24 @@
+{
+  "originHash" : "a35cc1e160083206d0cff3210166f17aece0420d0fdf42368f81557004f964b2",
+  "pins" : [
+    {
+      "identity" : "amazon-chime-sdk-ios-spm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/aws/amazon-chime-sdk-ios-spm",
+      "state" : {
+        "revision" : "b0d4b802f416abf6a6d55183a8e8114e1c6bf671",
+        "version" : "0.27.4"
+      }
+    },
+    {
+      "identity" : "phonenumberkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/marmelroy/PhoneNumberKit",
+      "state" : {
+        "revision" : "169ab10234347fb19b37441f2867ace896a284b0",
+        "version" : "4.3.0"
+      }
+    }
+  ],
+  "version" : 3
+}
