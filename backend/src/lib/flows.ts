@@ -136,7 +136,7 @@ export async function applyEvent(nudgeId: string, event: NudgeEvent): Promise<Nu
     }
     for (const eff of t.effects) {
       try {
-        updated = (await runEffect(updated, eff)) ?? updated;
+        updated = (await runEffect(updated, eff, 'userId' in event ? event.userId : undefined)) ?? updated;
       } catch (e) {
         console.error('effect failed', eff.type, e);
       }
@@ -147,10 +147,10 @@ export async function applyEvent(nudgeId: string, event: NudgeEvent): Promise<Nu
   throw new HttpError(409, 'conflict');
 }
 
-async function runEffect(n: NudgeItem, eff: Effect): Promise<NudgeItem | void> {
+async function runEffect(n: NudgeItem, eff: Effect, actorId?: string): Promise<NudgeItem | void> {
   switch (eff.type) {
     case 'create_call':
-      return createCallForNudge(n);
+      return createCallForNudge(n, actorId);
     case 'cleanup':
       await releaseUsers(n);
       await Promise.all(n.participants.map((u) => pushToUser(u, 'background', payloads.background('nudge.cleanup', n.id))));
@@ -202,7 +202,7 @@ export async function releaseUsers(n: NudgeItem) {
   );
 }
 
-async function createCallForNudge(n: NudgeItem): Promise<NudgeItem> {
+async function createCallForNudge(n: NudgeItem, actorId?: string): Promise<NudgeItem> {
   const callId = newId('c');
   const users = await loadUsers(n.participants);
   const { meeting, attendees } = await createMeeting(callId, n.participants);
@@ -226,16 +226,20 @@ async function createCallForNudge(n: NudgeItem): Promise<NudgeItem> {
   const updated = (await update(K.nudge(n.id), { callId })) as NudgeItem;
   const busyUntil = new Date(Date.now() + CALL_BUSY_MS).toISOString();
   await Promise.all(n.participants.map((u) => update(K.user(u), { activeCallId: callId, activeNudgeId: n.id, busyUntil })));
-  await notifyMatched(updated, callId, users);
+  await notifyMatched(updated, callId, users, actorId);
   return updated;
 }
 
-/** Waiting-room participants get call.matched over WS; everyone else gets a VoIP push (CallKit rings). */
-async function notifyMatched(n: NudgeItem, callId: string, users: Map<string, UserItem>) {
+/**
+ * The person whose accept completed the match is in the app by definition, and waiting-room participants too:
+ * both get call.matched over WS. Anyone else gets a VoIP push (CallKit rings). The actor is never rung, which
+ * avoids a race where their `waiting` WS message lands after their accept.
+ */
+async function notifyMatched(n: NudgeItem, callId: string, users: Map<string, UserItem>, actorId?: string) {
   await Promise.all(
     n.participants.map(async (uid) => {
       const conns = await connectionsFor(uid);
-      const waiting = conns.some((c) => c.waitingNudgeId === n.id);
+      const waiting = uid === actorId || conns.some((c) => c.waitingNudgeId === n.id);
       if (waiting) {
         await sendToUser(uid, { type: 'call.matched', callId, nudgeId: n.id });
       } else {

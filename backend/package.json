@@ -12,6 +12,7 @@
     "destroy:dev": "cdk destroy -c stage=dev --force"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",
     "@types/aws-lambda": "^8.10.163",
     "@types/node": "^22.20.4",
     "@types/ws": "^8.18.1",

@@ -134,6 +134,15 @@
     { "id": "h27", "kind": "hard", "label": false, "lines": [["F", "Your cat is so cute."], ["S", "Thanks, she's a menace though."]], "why": "no concrete moment" },
     { "id": "h28", "kind": "hard", "label": false, "lines": [["S", "Grandma used to make the best pancakes when we were little."]], "why": "long ago" },
     { "id": "h29", "kind": "hard", "label": false, "lines": [["S", "We're moving next month so I need to buy boxes."]], "why": "future" },
-    { "id": "h30", "kind": "hard", "label": false, "lines": [["F", "How was the museum trip?"], ["S", "We ended up not going, it was closed."]], "why": "didn't happen" }
+    { "id": "h30", "kind": "hard", "label": false, "lines": [["F", "How was the museum trip?"], ["S", "We ended up not going, it was closed."]], "why": "didn't happen" },
+
+    { "id": "c01", "kind": "ctx", "label": true, "expect": "dog|beach", "lines": [["F", "What did you do this week?"], ["S", "I made the most amazing lasagna last night."], ["F", "Nice."], ["S", "And we took the dog to the beach this morning, she loved it."]] },
+    { "id": "c02", "kind": "ctx", "label": true, "expect": "kayak", "lines": [["S", "Paris was amazing, we went up the Eiffel Tower."], ["F", "Jealous."], ["S", "Oh and the kayaking on the lake yesterday was so peaceful."]] },
+    { "id": "c03", "kind": "ctx", "label": false, "lines": [["S", "I made the most amazing lasagna last night."], ["F", "Ooh."], ["S", "Anyway, how's work going for you?"]] },
+    { "id": "c04", "kind": "ctx", "label": true, "expect": "bookshelf|shelf", "lines": [["S", "I finally finished the bookshelf."], ["F", "Wow, what wood?"], ["S", "Oak, and it came out so nice, you should see it."]] },
+    { "id": "c05", "kind": "ctx", "label": true, "expect": "kayak|lake", "lines": [["F", "Our trip was all museums."], ["S", "Ours was the lake one, we kayaked all day Saturday."]] },
+    { "id": "c06", "kind": "ctx", "label": false, "lines": [["S", "We went to the concert Friday."], ["F", "How was it?"], ["S", "Fun, but I didn't take a single picture, my phone was dead."]] },
+    { "id": "c07", "kind": "ctx", "label": true, "expect": "sushi|salmon", "lines": [["S", "The birthday cake I baked was a disaster."], ["F", "Haha."], ["S", "But the sushi platter we got after was incredible."]] },
+    { "id": "c08", "kind": "ctx", "label": false, "lines": [["S", "We hiked up to the lake on Saturday."], ["F", "I went hiking too, up at Stone Mountain."], ["S", "Oh cool, how was the view up there?"]] }
   ]
 }

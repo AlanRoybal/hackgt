@@ -12,7 +12,7 @@ const now = new Date('2026-09-26T18:00:00Z');
 
 const rows: any[] = [];
 const latencies: number[] = [];
-const cases = data.cases as { id: string; kind: string; label: boolean; lines: [string, string][] }[];
+const cases = data.cases as { id: string; kind: string; label: boolean; expect?: string; lines: [string, string][] }[];
 // Small concurrency to keep it quick without hammering the API.
 const queue = [...cases];
 await Promise.all(
@@ -23,7 +23,9 @@ await Promise.all(
       const d = await detectReference(segments, 'speaker', now);
       latencies.push(Date.now() - t0);
       const predicted = d.isReference && d.confidence >= MIN_CONFIDENCE;
-      rows.push({ id: c.id, kind: c.kind, label: c.label, predicted, query: d.query, confidence: d.confidence, dateHint: d.dateHint });
+      // Context cases also check the query is about the LAST line, not an earlier mention.
+      const queryOk = c.expect ? predicted && new RegExp(c.expect, 'i').test(d.query) : undefined;
+      rows.push({ id: c.id, kind: c.kind, label: c.label, predicted, queryOk, query: d.query, confidence: d.confidence, dateHint: d.dateHint });
     }
   }),
 );
@@ -42,5 +44,8 @@ mkdirSync(path.join(here, 'out'), { recursive: true });
 writeFileSync(path.join(here, 'out', 'detector-results.json'), JSON.stringify({ precision, recall, tp, fp, fn, rows }, null, 2));
 console.log(`cases ${rows.length}  TP ${tp}  FP ${fp} (hard-negative FP ${hardFp})  FN ${fn}`);
 console.log(`precision ${precision.toFixed(3)}  recall ${recall.toFixed(3)}  (targets ≥0.85 / ≥0.60)`);
+const qc = rows.filter((r) => r.queryOk !== undefined);
+console.log(`context cases: query about the last line ${qc.filter((r) => r.queryOk).length}/${qc.length}`);
+for (const r of qc.filter((r) => !r.queryOk)) console.log(`  wrong query ${r.id}: "${r.query}"`);
 console.log(`detector latency p50 ${pct(0.5)} ms  p95 ${pct(0.95)} ms`);
 for (const r of rows.filter((r) => r.label !== r.predicted)) console.log(`  ${r.label ? 'FN' : 'FP'} ${r.id} conf=${r.confidence} q="${r.query}"`);

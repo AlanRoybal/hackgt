@@ -50,7 +50,7 @@ describe('nudges', () => {
     expect(alert.payload.friendName).toBe('Mom');
   });
 
-  it('NUD-11: both accept → matched call; waiting-room user gets WS call.matched, the other gets a VoIP push', async () => {
+  it('NUD-11: both accept → matched call; waiting-room user gets WS call.matched; the accepting user is not rung', async () => {
     const [a, b] = await pair('acc');
     const id = await matchNudge(a, b);
     const sa = await openSocket(a);
@@ -64,8 +64,8 @@ describe('nudges', () => {
       expect(n.callId).toBeTruthy();
       const matched = await sa.waitFor((e) => e.type === 'call.matched');
       expect(matched.callId).toBe(n.callId);
-      const voip = (await pushes(b)).find((p) => p.kind === 'voip');
-      expect(voip.payload).toMatchObject({ type: 'call.incoming', callId: n.callId, callerId: a.id, hasVideo: true });
+      // Neither is rung: a is in the waiting room, b's own accept completed the match (callId is in its response).
+      expect((await pushes(b)).find((p) => p.kind === 'voip')).toBeUndefined();
       expect((await pushes(a)).find((p) => p.kind === 'voip')).toBeUndefined();
       const join = await b.req('GET', `/calls/${n.callId}/join`);
       expect(join.meeting.MeetingId).toBeTruthy();
@@ -79,6 +79,26 @@ describe('nudges', () => {
       expect((await a.req('GET', '/nudges/active')).nudge).toBeNull();
     } finally {
       sa.close();
+    }
+  });
+
+  it('NUD-11 race: the user whose accept completes the match gets WS call.matched, never a VoIP ring, even before sending `waiting`', async () => {
+    const [a, b] = await pair('race');
+    const id = await matchNudge(a, b);
+    await a.req('POST', `/nudges/${id}/respond`, { action: 'accept' }); // a leaves the app: no socket, not waiting
+    const sb = await openSocket(b); // b is in the app but its `waiting` message hasn't landed yet
+    try {
+      const n = await b.req('POST', `/nudges/${id}/respond`, { action: 'accept' });
+      expect(n.state).toBe('matched');
+      expect(n.callId).toBeTruthy(); // the respond response carries the call id
+      const matched = await sb.waitFor((e) => e.type === 'call.matched');
+      expect(matched.callId).toBe(n.callId);
+      expect((await pushes(b)).find((p) => p.kind === 'voip')).toBeUndefined();
+      const voipA = await until(async () => (await pushes(a)).find((p) => p.kind === 'voip'));
+      expect(voipA.payload).toMatchObject({ type: 'call.incoming', callId: n.callId, callerId: b.id });
+      await b.req('POST', `/calls/${n.callId}/end`);
+    } finally {
+      sb.close();
     }
   });
 
@@ -138,7 +158,8 @@ describe('nudges', () => {
       return r.considered === 1 ? r : undefined;
     });
     expect(r.created).toEqual([]);
-    expect(Object.values(r.skipped)[0]).toContain('b:focus');
+    // The matcher labels the pair members a/b by sorted user id, not by test order.
+    expect(Object.values(r.skipped)[0]).toEqual([expect.stringMatching(/^[ab]:focus$/)]);
     await b.req('PUT', '/me/context', { focus: { isFocused: false, at: new Date().toISOString() } });
     await b.req('PUT', '/me/availability', {
       busyBlocks: [{ start: new Date(Date.now() - 60_000).toISOString(), end: new Date(Date.now() + 3_600_000).toISOString() }],

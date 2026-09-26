@@ -46,9 +46,10 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
   if (!call.participants.includes(userId) || call.endedAt) return { stored: false };
   const text = String(input.text ?? '').trim().slice(0, 2000);
   if (!text) return { stored: false };
+  const currentSk = segSk(receivedAt, userId, String(input.segId ?? newId('g')).slice(0, 64));
   await put({
     pk: `CALL#${call.id}`,
-    sk: segSk(receivedAt, userId, String(input.segId ?? newId('g')).slice(0, 64)),
+    sk: currentSk,
     userId,
     text,
     startMs: input.startMs,
@@ -70,7 +71,9 @@ export async function handleTranscript(userId: string, input: TranscriptInput) {
     },
   });
   sw.lap('context');
-  const detection = await detectReference(segs.map((s) => ({ userId: s.userId, text: s.text })), userId);
+  // The segment just received is always the line being judged, even if the friend's segment landed after it.
+  const window = [...segs.filter((s) => s.sk !== currentSk).map((s) => ({ userId: s.userId, text: s.text })), { userId, text }];
+  const detection = await detectReference(window, userId);
   sw.lap('detector');
   if (!detection.isReference || detection.confidence < MIN_CONFIDENCE) {
     emitLatency(sw.total(), { pipeline: 'reference' }, { callId: call.id, outcome: 'no_reference' });
