@@ -9,6 +9,7 @@ These cover what a simulator or bot can't: real Sign in with Apple, APNs to a re
 | [03-calls.md](03-calls.md) | 1 phone + peer-bot | CALL-1–5, NUD-11 |
 | [04-photos.md](04-photos.md) | 1 phone + peer-bot | PHO-1, PHO-5, REF-1, REF-4, REF-5, REF-7–9 |
 | [background-matrix.md](background-matrix.md) | 1 phone | BG-1 (fill in observed results) |
+| [tap-to-add.md](tap-to-add.md) | 2 phones (UWB and not) | ACC-13 |
 | [two-person.md](two-person.md) | 2 phones, 2 people, remote | end to end, TestFlight |
 
 Record results in each script's table: ✅ pass, ❌ fail (with a note), ⏭ skipped (why). A story is only Done when its device steps pass.
