@@ -136,7 +136,7 @@ struct NudgeSettingsView: View {
                         ForEach(Frequency.allCases, id: \.self) { Text($0.title) }
                     }
                     .pickerStyle(.segmented)
-                    Text(store.settings.frequency.explanation).font(.footnote).foregroundStyle(Palette.inkSecondary)
+                    Text(store.settings.frequency.explanation + " Nudge temporarily backs off when you skip or miss invitations, then gradually tries again. Your frequency setting stays the same.").font(.footnote).foregroundStyle(Palette.inkSecondary)
                         .animation(nil, value: store.settings.frequency)
                 }
                 .nudgeCard()

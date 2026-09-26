@@ -138,7 +138,7 @@ public final class NudgeCenter {
         banner = nil
         do {
             if let nudge { _ = try await api.respond(nudgeId: nudge.id, action: .less) }
-            let me = try await api.frequencyLess()
+            let me = try await (nudge == nil ? api.frequencyLess() : api.me())
             onMeUpdated?(me)
             toast = ToastMessage(text: "Nudges set to \(me.user.settings.frequency.title)", action: .undoFrequency, actionTitle: "Undo")
         } catch {
@@ -149,6 +149,14 @@ public final class NudgeCenter {
     public func undoLess() async {
         toast = nil
         do { onMeUpdated?(try await api.frequencyUndo()) } catch { self.error = error.localizedDescription }
+    }
+
+    public func pause(_ nudge: Nudge) async {
+        do {
+            _ = try await api.respond(nudgeId: nudge.id, action: .pause)
+            banner = nil
+            toast = ToastMessage(text: "Automatic nudges paused for an hour")
+        } catch { self.error = error.localizedDescription }
     }
 
     public func dismissBanner() { banner = nil }
@@ -174,7 +182,7 @@ public final class NudgeCenter {
             _ = try? await api.respond(nudgeId: nudgeId, action: .skip)
         case NotificationIDs.less:
             _ = try? await api.respond(nudgeId: nudgeId, action: .less)
-            if let me = try? await api.frequencyLess() { onMeUpdated?(me) }
+            if let me = try? await api.me() { onMeUpdated?(me) }
         default: break
         }
     }
