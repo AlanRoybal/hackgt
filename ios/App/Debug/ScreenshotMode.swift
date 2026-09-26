@@ -33,7 +33,7 @@ enum ScreenshotMode {
         "call-connecting", "call-connected", "call-suggestion", "call-mine", "call-other", "call-both", "call-queue",
         "call-auto", "call-muted", "call-reconnecting", "summary", "summary-pending",
         "settings", "settings-nudges", "settings-calendars", "settings-photos", "settings-memory", "settings-account",
-        "delete-account",
+        "delete-account", "tap-near", "tap-connecting", "tap-added", "tap-failed",
     ]
 }
 
@@ -75,6 +75,8 @@ struct ScreenshotHost: View {
             PermissionPrimerView(kind: permission(s), onDone: {})
         case "add-first-friends": AddFirstFriendsView(onDone: {})
         case "friends", "friends-empty", "friends-loading", "friends-offline", "banner", "toast", "followup": MainView()
+        case "tap-demo": MainView().task { await Self.playTapDemo(app) }
+        case let s where s.hasPrefix("tap-"): MainView()
         case "add-friends-search", "add-friends-contacts", "add-friends-invite": AddFriendsPreview(screen: screen)
         case "requests": FriendRequestsView()
         case "friend-profile", "friend-profile-empty": NavigationStack { FriendProfileView(friendId: MockData.mom.id) }
@@ -91,6 +93,18 @@ struct ScreenshotHost: View {
         case "delete-account": Color.clear.sheet(isPresented: .constant(true)) { DeleteAccountSheet().environment(app) }
         default: Text("Unknown screen \(screen)")
         }
+    }
+
+    /// `-screenshotScreen tap-demo -liveMotion`: a phone approaches, touches, and the friend is added.
+    static func playTapDemo(_ app: AppModel) async {
+        try? await Task.sleep(for: .seconds(1))
+        for i in 0...24 {
+            app.tap.preview(.near(closeness: Double(i) / 24))
+            try? await Task.sleep(for: .milliseconds(60))
+        }
+        app.tap.preview(.connecting)
+        try? await Task.sleep(for: .seconds(1.6))
+        app.tap.preview(.added(PublicUser(id: "u_eli", handle: "eli", displayName: "Eli Rosen")))
     }
 
     func permission(_ s: String) -> PermissionKind {
@@ -225,6 +239,15 @@ enum MockData {
         case "followup":
             app.nudges.preview(followUp: FollowUpDraft(nudgeId: nudge.id, friendName: "Mom", body: "Can't talk this minute, I'll call you later!"))
         case "incoming": app.incoming = AppModel.IncomingCall(callId: "c_2", friend: mom, name: "Mom")
+        default: break
+        }
+
+        // Tap to add
+        switch screen {
+        case "tap-near": app.tap.preview(.near(closeness: 0.7))
+        case "tap-connecting": app.tap.preview(.connecting)
+        case "tap-added": app.tap.preview(.added(PublicUser(id: "u_eli", handle: "eli", displayName: "Eli Rosen")))
+        case "tap-failed": app.tap.preview(.failed("Didn't catch that. Hold your phones together again."))
         default: break
         }
 

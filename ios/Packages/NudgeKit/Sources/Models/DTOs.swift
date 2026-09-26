@@ -215,6 +215,37 @@ public enum Relation: String, Codable, Sendable {
     case none, requested, incoming, friends, blocked
 }
 
+/// What this phone hands to the other one when they're held together (ACC-13).
+public struct TapToken: Codable, Sendable, Hashable {
+    public var token: String
+    public var expiresAt: Date
+
+    public init(token: String, expiresAt: Date) {
+        self.token = token
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct TapResult: Codable, Sendable, Hashable {
+    public enum Status: String, Codable, Sendable {
+        /// Only this phone's tap has landed so far; ask again.
+        case pending
+        /// Friends because of this tap.
+        case friends
+        /// Were already friends; nothing changed.
+        case alreadyFriends = "already_friends"
+    }
+
+    public var status: Status
+    /// Who they are, once they're friends (never while pending).
+    public var user: PublicUser?
+
+    public init(status: Status, user: PublicUser?) {
+        self.status = status
+        self.user = user
+    }
+}
+
 public struct SearchResult: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var handle: String
