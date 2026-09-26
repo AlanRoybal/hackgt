@@ -5,6 +5,10 @@ public enum PhotoImage: Hashable, Sendable {
     case url(URL)
     case data(Data)
     case placeholder(String) // screenshot/preview mode: an asset name
+    /// A short video (local file or remote URL) with its poster frame, shown until the first frame is ready.
+    case video(URL, poster: URL?)
+
+    public var isVideo: Bool { if case .video = self { true } else { false } }
 }
 
 /// A photo currently visible in a mini window.
@@ -58,6 +62,15 @@ public enum DisplayRule {
 public enum PhotoTiming {
     public static let maxQueue = 5
     public static let readyTimeout: TimeInterval = 1.5
+    /// Longest clip that plays in a call (VID-1); the backend indexes nothing longer.
+    public static let maxVideoMs = 30_000
+    /// Held past the clip's end so a late first frame doesn't cut the ending, then the video dissolves away.
+    public static let videoTailMs = 400
+
+    /// A video stays up for its own length, whatever is queued behind it (VID-4).
+    public static func durationMs(videoMs: Int) -> Int {
+        min(max(videoMs, 1000), maxVideoMs) + videoTailMs
+    }
 
     public static func durationMs(pendingIncludingCurrent n: Int) -> Int {
         switch n {

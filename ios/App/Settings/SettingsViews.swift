@@ -302,7 +302,8 @@ struct PhotoSettingsView: View {
                 VStack(alignment: .leading, spacing: Space.s) {
                     HStack(alignment: .firstTextBaseline) {
                         Text("\(status.indexed)").font(.system(.largeTitle, design: .rounded, weight: .semibold)).foregroundStyle(Palette.ink)
-                        Text("photos from the last 30 days").font(.subheadline).foregroundStyle(Palette.inkSecondary)
+                        Text((status.videos ?? 0) > 0 ? "photos and videos from the last 30 days" : "photos from the last 30 days")
+                            .font(.subheadline).foregroundStyle(Palette.inkSecondary)
                     }
                     HStack(spacing: Space.xs) {
                         if status.excluded > 0 { Pill("\(status.excluded) excluded for safety", tint: .rose, systemImage: "shield.lefthalf.filled") }

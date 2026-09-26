@@ -9,8 +9,8 @@ public final class PhotoShareController {
     public struct Dependencies: Sendable {
         /// POST /calls/{id}/shares → shareId
         public var createShare: @Sendable (_ photoId: String, _ suggestionId: String?) async throws -> String
-        /// GET /calls/{id}/shares/{shareId} + download bytes
-        public var fetchImage: @Sendable (_ shareId: String) async throws -> Data
+        /// GET /calls/{id}/shares/{shareId} + download the photo, or the clip to a local file for a video
+        public var fetchMedia: @Sendable (_ shareId: String, _ isVideo: Bool) async throws -> PhotoImage
         /// Chime realtimeSendDataMessage
         public var send: @Sendable (_ data: Data) async throws -> Void
         /// POST /calls/{id}/shares/{shareId}/shown
@@ -18,12 +18,12 @@ public final class PhotoShareController {
 
         public init(
             createShare: @escaping @Sendable (String, String?) async throws -> String,
-            fetchImage: @escaping @Sendable (String) async throws -> Data,
+            fetchMedia: @escaping @Sendable (String, Bool) async throws -> PhotoImage,
             send: @escaping @Sendable (Data) async throws -> Void,
             markShown: @escaping @Sendable (String, Date, Int) async -> Void
         ) {
             self.createShare = createShare
-            self.fetchImage = fetchImage
+            self.fetchMedia = fetchMedia
             self.send = send
             self.markShown = markShown
         }
@@ -84,11 +84,11 @@ public final class PhotoShareController {
                 do { try await deps.send(try message.encoded()) }
                 catch { log.error("send failed: \(String(describing: error), privacy: .public)") }
             }
-        case .fetch(let shareId, _):
+        case .fetch(let shareId, _, let isVideo):
             Task {
                 do {
-                    let data = try await deps.fetchImage(shareId)
-                    dispatch(.incomingLoaded(shareId: shareId, image: .data(data)))
+                    let image = try await deps.fetchMedia(shareId, isVideo)
+                    dispatch(.incomingLoaded(shareId: shareId, image: image))
                 } catch {
                     dispatch(.incomingFailed(shareId: shareId))
                 }

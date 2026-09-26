@@ -97,7 +97,7 @@ struct CallSummaryView: View {
         VStack(alignment: .leading, spacing: Space.s) {
             HStack(spacing: Space.xs) {
                 Image(systemName: "photo.on.rectangle").foregroundStyle(Palette.butterStrong)
-                Text("Photos you shared").font(.headline).foregroundStyle(Palette.ink)
+                Text(p.photos.contains(where: \.isVideo) ? "Photos and videos you shared" : "Photos you shared").font(.headline).foregroundStyle(Palette.ink)
             }
             .padding(.horizontal, Space.margin)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -106,8 +106,9 @@ struct CallSummaryView: View {
                         // Screenshot mode has no server, so its fixtures name a bundled scene instead.
                         PhotoContent(image: app.isPreview ? .placeholder(photo.shareId) : .url(photo.url))
                             .frame(width: 96, height: 128)
+                            .overlay(alignment: .bottomLeading) { if photo.isVideo { VideoBadge(durationMs: nil).padding(Space.xs) } }
                             .clipShape(RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
-                            .accessibilityLabel(photo.senderId == p.friendId ? "Photo from \(p.friendName)" : "Photo you showed")
+                            .accessibilityLabel(recapLabel(photo, p))
                     }
                 }
                 .padding(.horizontal, Space.margin)
@@ -115,5 +116,10 @@ struct CallSummaryView: View {
             .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in interacted = true })
         }
         .transition(.opacity)
+    }
+
+    private func recapLabel(_ photo: CallPhoto, _ p: MemoryStore.PendingSummary) -> String {
+        let kind = photo.isVideo ? "Video" : "Photo"
+        return photo.senderId == p.friendId ? "\(kind) from \(p.friendName)" : "\(kind) you showed"
     }
 }

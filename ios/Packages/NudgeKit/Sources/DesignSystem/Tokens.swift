@@ -158,6 +158,8 @@ public enum Motion {
     public static let snap = Animation.spring(response: 0.4, dampingFraction: 0.8)
     /// Photo swap in the mini window (Prototypes page, unchanged).
     public static let photoSwap = Animation.spring(response: 0.35, dampingFraction: 1.0)
+    /// A shared video blurring and fading away when its clip ends (VID-4).
+    public static let dissipate = Animation.easeOut(duration: 0.7)
 
     public static func resolved(_ animation: Animation, reduceMotion: Bool) -> Animation {
         reduceMotion ? fade : animation
