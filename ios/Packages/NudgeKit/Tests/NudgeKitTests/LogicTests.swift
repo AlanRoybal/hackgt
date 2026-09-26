@@ -220,4 +220,12 @@ struct ContractTests {
         let d = try NudgeJSON.decoder().decode(CallSummary.self, from: Data(#"{"callId":"c","summary":"s","durationSec":60,"createdAt":"2026-09-26T15:00:00Z","topics":[]}"#.utf8))
         #expect(d.durationSec == 60)
     }
+
+    @Test func memoriesDecodeCalendarDayFollowUp() throws {
+        // Topics used to come back with followUpAfter as a bare day, which failed the whole payload.
+        let json = #"{"topics":[{"id":"t","title":"the exam","aboutUserId":"u","summary":"s","followUpAfter":"2026-09-29","status":"open","sourceCallId":"c"}],"summaries":[{"callId":"c","summary":"s","durationSec":70,"createdAt":"2026-09-26T17:26:54.846Z","topics":[]}]}"#
+        let m = try NudgeJSON.decoder().decode(Memories.self, from: Data(json.utf8))
+        #expect(m.topics.first?.followUpAfter == NudgeJSON.parseDate("2026-09-29T00:00:00Z"))
+        #expect(m.summaries.count == 1)
+    }
 }

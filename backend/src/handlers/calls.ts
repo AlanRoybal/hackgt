@@ -1,6 +1,6 @@
 // /calls/* — join, end, summary, photo shares (SPEC CALL, REF-7, REF-11, D-6).
 import { get, put, update } from '../lib/db.js';
-import { applyEvent, endCall, getCall, otherOf, type CallItem } from '../lib/flows.js';
+import { applyEvent, endCall, getCall, otherOf, topicDTO, type CallItem } from '../lib/flows.js';
 import { bad, forbidden, HttpError, notFound, Res, router } from '../lib/http.js';
 import { K, newId } from '../lib/keys.js';
 import { presignGet } from '../lib/s3.js';
@@ -57,14 +57,7 @@ export const handler = router({
         summary: s.summary,
         durationSec: s.durationSec,
         createdAt: s.createdAt,
-        topics: topics.map((t) => ({
-          id: t.id,
-          title: t.title,
-          aboutUserId: t.aboutUserId,
-          summary: t.summary,
-          followUpAfter: t.followUpAfter ?? undefined,
-          status: t.status,
-        })),
+        topics: topics.map(topicDTO),
       };
     }
     if (c.summarized || (c.endedAt && !c.memoryAllowed)) {

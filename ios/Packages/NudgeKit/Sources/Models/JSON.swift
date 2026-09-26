@@ -67,7 +67,9 @@ public enum NudgeJSON {
 
     public static func parseDate(_ s: String) -> Date? {
         if let d = try? Date(s, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)) { return d }
-        return try? Date(s, strategy: Date.ISO8601FormatStyle())
+        if let d = try? Date(s, strategy: Date.ISO8601FormatStyle()) { return d }
+        // Calendar days ("2026-09-29"), e.g. a topic's followUpAfter from an older backend.
+        return try? Date(s, strategy: Date.ISO8601FormatStyle().year().month().day())
     }
 
     public static func formatDate(_ d: Date) -> String {
