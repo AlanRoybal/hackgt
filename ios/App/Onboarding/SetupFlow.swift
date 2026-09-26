@@ -198,41 +198,60 @@ struct PermissionPrimerView: View {
     var onDone: () -> Void
     @State private var working = false
 
+    /// Figma M07a: the card rises 16 pt, the art pops 60 → 100%, the copy fades up, the buttons spring up last.
+    /// Idle: the art floats and sways against its backdrop.
     var body: some View {
+        MotionTimeline(loops: true) { beat in content(beat) }
+            .padding(.horizontal, Space.margin)
+            .padding(.bottom, Space.m)
+            .nudgeBackground()
+    }
+
+    private func content(_ beat: Beat) -> some View {
         let denied = forceDenied || kind.denied
-        VStack(spacing: Space.l) {
+        return VStack(spacing: Space.l) {
             Spacer()
-            Illustration(kind.illustration)
-                .frame(width: 220, height: 160)
-                .padding(.vertical, Space.l)
-                .frame(maxWidth: .infinity)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
+            IdleArt(beat: beat, upFirst: true) {
+                Illustration(kind.illustration).frame(width: 220, height: 160)
+                    .motionLayer(beat.pop(at: 0.1, from: 0.6, fade: 0, spring: Motion.Springs.playful))
+            } backdrop: {
+                Ellipse().fill(Palette.surfaceAlt).frame(width: 250, height: 170)
+                    .motionLayer(beat.pop(at: 0.1, from: 0.6, fade: 0, spring: Motion.Springs.playful))
+            }
+            .padding(.vertical, Space.l)
+            .frame(maxWidth: .infinity)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
+            .motionLayer(beat.fadeUp(at: 0, fade: 0.21, rise: 0.35, distance: 16))
             VStack(spacing: Space.s) {
                 Text(kind.title).font(Typography.largeTitle).displayTracking().foregroundStyle(Palette.ink).multilineTextAlignment(.center)
+                    .motionLayer(beat.fadeUp(at: 0.3))
                 Text(denied ? "Access is turned off. You can turn it on in Settings whenever you like." : kind.body)
                     .font(.body).foregroundStyle(Palette.inkSecondary).multilineTextAlignment(.center)
+                    .motionLayer(beat.fadeUp(at: 0.38))
             }
             Spacer()
             VStack(spacing: Space.xs) {
-                if denied {
-                    NudgeButton("Open Settings") { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
-                } else {
-                    NudgeButton("Continue", isLoading: working) {
-                        Task {
-                            working = true
-                            if !app.isPreview { await kind.request(app) }
-                            working = false
-                            onDone()
+                Group {
+                    if denied {
+                        NudgeButton("Open Settings") { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
+                    } else {
+                        NudgeButton("Continue", isLoading: working) {
+                            Task {
+                                working = true
+                                if !app.isPreview { await kind.request(app) }
+                                working = false
+                                onDone()
+                            }
                         }
                     }
                 }
+                .motionLayer(beat.springUp(at: 0.8).tappable)
                 Button("Not now", action: onDone)
                     .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.inkSecondary).frame(minHeight: 44)
+                    .buttonStyle(PressFeedbackButtonStyle())
+                    .motionLayer(beat.springUp(at: 0.88).tappable)
             }
         }
-        .padding(.horizontal, Space.margin)
-        .padding(.bottom, Space.m)
-        .nudgeBackground()
     }
 }
 
