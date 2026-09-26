@@ -5,9 +5,11 @@ import { K, pairKey } from './keys.js';
 import { avatarKey, deleteObject, deletePrefix } from './s3.js';
 import { deletePhotoVectors } from './vectors.js';
 import type { UserItem } from './users.js';
+import { disconnectWhoop } from './whoop.js';
 
 export async function deleteAccount(user: UserItem): Promise<void> {
   const id = user.id;
+  await disconnectWhoop(id);
   const own = await queryPartition(`USER#${id}`);
   const keys: Key[] = own.map((i) => ({ pk: i.pk, sk: i.sk }));
 

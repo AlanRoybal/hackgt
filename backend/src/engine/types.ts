@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export interface BusyBlock { start: string; end: string }
 
 export interface Availability {
+  whoop?: import('./whoop.js').WhoopSignal;
   busyBlocks: BusyBlock[];
   syncedAt?: string;
   focus?: { isFocused: boolean; at: string };

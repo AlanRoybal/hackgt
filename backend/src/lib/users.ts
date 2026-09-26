@@ -73,6 +73,13 @@ export async function loadUsers(ids: string[]): Promise<Map<string, UserItem>> {
 
 export async function loadAvailability(ids: string[]): Promise<Map<string, AvailabilityItem>> {
   const items = await batchGet<AvailabilityItem>(ids.map(K.avail));
+  const whoop = await batchGet(ids.map(id => ({ pk: `USER#${id}`, sk: 'WHOOP' })));
+  for (const a of items) {
+    const row = whoop.find(w => w.pk === a.pk);
+    if (row?.signal) a.whoop = { syncedAt: row.signal.syncedAt,
+      ...(row.sleepEnabled ? { sleepStart: row.signal.sleepStart, sleepEnd: row.signal.sleepEnd } : {}),
+      ...(row.workoutEnabled ? { workoutUntil: row.signal.workoutUntil } : {}) };
+  }
   return new Map(items.map((a) => [a.pk.slice('USER#'.length), a]));
 }
 
