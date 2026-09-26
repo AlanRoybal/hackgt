@@ -59,6 +59,7 @@ public final class NearbyTapService {
 
     public func start() {
         guard !isRunning, me() != nil else { return }
+        log.notice("tap service started, UWB=\(Self.supportsUWB)")
         isRunning = true
         let link = TapLink { [weak self] event in Task { @MainActor in self?.handle(event) } }
         self.link = link
@@ -68,6 +69,7 @@ public final class NearbyTapService {
 
     public func stop() {
         guard isRunning else { return }
+        log.notice("tap service stopped")
         isRunning = false
         tokenTask?.cancel()
         link?.stop()
@@ -92,6 +94,8 @@ public final class NearbyTapService {
         while !Task.isCancelled {
             do {
                 let t = try await api.tapToken()
+                guard !Task.isCancelled, isRunning else { return }
+                log.notice("tap token ready")
                 token = t
                 for key in peers.keys { sendHello(to: key) }
                 // Swap for a new one a minute before it runs out.
@@ -108,7 +112,12 @@ public final class NearbyTapService {
         guard let token, let me = me() else { return }
         var peer = peers[key] ?? Peer()
         if peer.ranging == nil, Self.supportsUWB { peer.ranging = RangingSession(key: key) { [weak self] key, d in self?.ranged(key, d) } }
+        // The remote hello can arrive before our HTTP token and local ranging session.
+        if !isFriend(peer.hello?.userId ?? ""), let remoteToken = peer.hello?.rangingToken {
+            peer.ranging?.run(peerToken: remoteToken)
+        }
         peers[key] = peer
+        log.notice("tap sending hello, ranging=\(peer.ranging?.discoveryToken != nil)")
         link?.send(.hello(TapHello(userId: me, token: token.token, rangingToken: peer.ranging?.discoveryToken)), to: key)
     }
 
@@ -134,6 +143,7 @@ public final class NearbyTapService {
 
     private func received(_ hello: TapHello, from key: String) {
         guard hello.userId != me() else { return }
+        log.notice("tap received hello, alreadyFriend=\(self.isFriend(hello.userId)), ranging=\(hello.rangingToken != nil)")
         var peer = peers[key] ?? Peer()
         peer.hello = hello
         if isFriend(hello.userId) {
@@ -158,6 +168,7 @@ public final class NearbyTapService {
 
     private func ranged(_ key: String, _ distance: Float?) {
         guard isRunning, eligible(key) != nil else { return }
+        log.debug("tap distance \(distance ?? -1)")
         let touched = peers[key]?.tracker.add(distance: distance) ?? false
         if touched { tapped(key) } else { updateNear() }
     }
@@ -216,6 +227,7 @@ public final class NearbyTapService {
 
     private func tapped(_ key: String) {
         guard !isBusy, let hello = eligible(key)?.hello else { return }
+        log.notice("tap detected; redeeming")
         cooldown[hello.userId] = Date().addingTimeInterval(TapDetection.cooldown)
         for k in peers.keys { peers[k]?.tracker.reset() }
         phase = .connecting
@@ -303,6 +315,7 @@ final class RangingSession: NSObject, NISessionDelegate {
     }
 
     nonisolated func session(_ session: NISession, didInvalidateWith error: any Error) {
+        Logger(subsystem: "app.nudge", category: "tap").error("tap ranging invalidated: \(error.localizedDescription, privacy: .public)")
         MainActor.assumeIsolated { onDistance(key, nil) }
     }
 }

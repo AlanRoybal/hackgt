@@ -105,7 +105,7 @@ struct MainView: View {
 
     /// Tap to add listens while the app is open and nothing full-screen (a call, the waiting room) is up.
     private var tapListening: Bool {
-        !app.isPreview && scenePhase == .active && FlowContainer.current(app) == nil
+        !app.isPreview && scenePhase != .background && FlowContainer.current(app) == nil
     }
 
     var body: some View {

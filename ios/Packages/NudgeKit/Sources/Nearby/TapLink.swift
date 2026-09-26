@@ -19,6 +19,13 @@ final class TapLink: NSObject, @unchecked Sendable {
     private let advertiser: MCNearbyServiceAdvertiser
     private let browser: MCNearbyServiceBrowser
     private let peers = OSAllocatedUnfairLock<[String: MCPeerID]>(uncheckedState: [:])
+    private struct Discovery {
+        var running = false
+        var found: [String: MCPeerID] = [:]
+        var lastInvite: [String: Date] = [:]
+    }
+    private let discovery = OSAllocatedUnfairLock(uncheckedState: Discovery())
+    private var retryTask: Task<Void, Never>?
     private let onEvent: @Sendable (Event) -> Void
     private let log = Logger(subsystem: "app.nudge", category: "tap")
 
@@ -35,15 +42,46 @@ final class TapLink: NSObject, @unchecked Sendable {
     }
 
     func start() {
+        discovery.withLockUnchecked { $0.running = true }
+        log.notice("tap discovery started")
+        retryTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                self?.inviteAvailable()
+            }
+        }
         advertiser.startAdvertisingPeer()
         browser.startBrowsingForPeers()
     }
 
     func stop() {
+        discovery.withLockUnchecked { $0 = Discovery() }
+        retryTask?.cancel()
+        retryTask = nil
+        log.notice("tap discovery stopped")
         advertiser.stopAdvertisingPeer()
         browser.stopBrowsingForPeers()
         session.disconnect()
         peers.withLockUnchecked { $0.removeAll() }
+    }
+
+    private func inviteAvailable() {
+        let connected = peers.withLockUnchecked { Set($0.keys) }
+        let targets = discovery.withLockUnchecked { d -> [MCPeerID] in
+            guard d.running else { return [] }
+            let now = Date()
+            return d.found.values.filter { peer in
+                let key = peer.displayName
+                guard me.displayName < key, !connected.contains(key),
+                      now.timeIntervalSince(d.lastInvite[key] ?? .distantPast) >= 22 else { return false }
+                d.lastInvite[key] = now
+                return true
+            }
+        }
+        for peer in targets {
+            log.notice("tap inviting nearby peer")
+            browser.invitePeer(peer, to: session, withContext: nil, timeout: 20)
+        }
     }
 
     /// Sends to one peer, or every connected peer when `key` is nil.
@@ -59,11 +97,13 @@ final class TapLink: NSObject, @unchecked Sendable {
 extension TapLink: MCSessionDelegate {
     func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
         let key = peerID.displayName
+        log.notice("tap connection state \(state.rawValue)")
         switch state {
         case .connected:
             peers.withLockUnchecked { $0[key] = peerID }
             onEvent(.connected(key))
         case .notConnected:
+            discovery.withLockUnchecked { $0.lastInvite.removeValue(forKey: key) }
             let known = peers.withLockUnchecked { $0.removeValue(forKey: key) != nil }
             if known { onEvent(.disconnected(key)) }
         default: break
@@ -81,16 +121,22 @@ extension TapLink: MCSessionDelegate {
 
 extension TapLink: MCNearbyServiceBrowserDelegate, MCNearbyServiceAdvertiserDelegate {
     func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String: String]?) {
-        // Both phones see each other; only the one with the smaller key invites, so there's one connection.
-        guard me.displayName < peerID.displayName else { return }
-        browser.invitePeer(peerID, to: session, withContext: nil, timeout: 10)
+        log.notice("tap found nearby peer")
+        discovery.withLockUnchecked { $0.found[peerID.displayName] = peerID }
+        inviteAvailable()
     }
 
-    func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {}
+    func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
+        discovery.withLockUnchecked {
+            $0.found.removeValue(forKey: peerID.displayName)
+            $0.lastInvite.removeValue(forKey: peerID.displayName)
+        }
+    }
 
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID,
                     withContext context: Data?, invitationHandler: @escaping (Bool, MCSession?) -> Void) {
-        invitationHandler(true, session)
+        log.notice("tap received invitation")
+        invitationHandler(discovery.withLockUnchecked { $0.running }, session)
     }
 
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: any Error) {
