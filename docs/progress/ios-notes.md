@@ -50,3 +50,9 @@ See the final report in the task result for the current numbers. Pure logic is t
 - the reverse geocoding rate limit on real photo libraries
 
 The app code for all of these is written and compiles. The Developer sign-in path lets everything else (REST, WS, stores) be exercised against the dev stage from the simulator.
+
+## Results (2026-09-26)
+
+- `NudgeKit` tests: **59 tests in 15 suites, all passing** (Swift Testing, iOS 26.5 simulator; parameterized cases counted once).
+- App + both extensions build for the simulator unsigned: **0 errors, 0 warnings in project code** (clean build).
+- Screenshots: **212** = 53 screens × {light, dark, ax5, reduce-motion} in `docs/screens/`. Reviewed as contact sheets; the AX5 layout issues found were fixed (adaptive stacks, scroll fallbacks).
