@@ -29,20 +29,8 @@ struct HandleView: View {
 
                 HStack {
                     Spacer()
-                    PhotosPicker(selection: $avatarItem, matching: .images) {
-                        ZStack(alignment: .bottomTrailing) {
-                            if let avatarImage {
-                                Image(uiImage: avatarImage).resizable().scaledToFill().frame(width: 96, height: 96).clipShape(Circle())
-                            } else {
-                                AvatarView(name: displayName.isEmpty ? handle : displayName, size: 96, seed: app.session.userId)
-                            }
-                            Image(systemName: "camera.fill").font(.footnote.weight(.semibold))
-                                .foregroundStyle(Palette.lavenderStrong)
-                                .frame(width: 32, height: 32)
-                                .background(Palette.lavender, in: Circle())
-                                .overlay(Circle().strokeBorder(Palette.bg, lineWidth: 3))
-                        }
-                    }
+                    let label = AvatarPickerLabel(image: avatarImage, name: displayName.isEmpty ? handle : displayName, seed: app.session.userId)
+                    PhotosPicker(selection: $avatarItem, matching: .images) { label }
                     .accessibilityLabel("Choose a profile photo")
                     Spacer()
                 }
@@ -181,5 +169,26 @@ extension UIImage {
         format.scale = 1
         return UIGraphicsImageRenderer(size: target, format: format).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
             .jpegData(compressionQuality: quality)
+    }
+}
+
+private struct AvatarPickerLabel: View, Sendable {
+    let image: UIImage?
+    let name: String
+    let seed: String?
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill().frame(width: 96, height: 96).clipShape(Circle())
+            } else {
+                AvatarView(name: name, size: 96, seed: seed)
+            }
+            Image(systemName: "camera.fill").font(.footnote.weight(.semibold))
+                .foregroundStyle(Palette.lavenderStrong)
+                .frame(width: 32, height: 32)
+                .background(Palette.lavender, in: Circle())
+                .overlay(Circle().strokeBorder(Palette.bg, lineWidth: 3))
+        }
     }
 }

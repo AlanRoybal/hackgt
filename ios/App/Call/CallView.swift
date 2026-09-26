@@ -11,6 +11,7 @@ struct CallView: View {
     @State private var lastInteraction = Date()
     @State private var corner: SnapGeometry.Corner = .topTrailing
     @State private var drag: CGSize = .zero
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var call: CallController { app.call }
     static let miniSize = CGSize(width: 112, height: 160)
@@ -50,6 +51,7 @@ struct CallView: View {
         }
         .background(Palette.callScrim.ignoresSafeArea())
         .environment(\.colorScheme, .dark)
+        .preferredColorScheme(.dark)
         .statusBarHidden(!controlsVisible)
         .animation(Motion.resolved(Motion.move, reduceMotion: reduceMotion), value: controlsVisible)
         .task(id: lastInteraction) {
@@ -108,8 +110,10 @@ struct CallView: View {
     func suggestionLayer(center: CGPoint, full: CGSize) -> some View {
         let below = corner == .topLeading || corner == .topTrailing
         let leading = corner == .topLeading || corner == .bottomLeading
-        let y = center.y + (below ? Self.miniSize.height / 2 + 44 : -Self.miniSize.height / 2 - 44)
-        let x = leading ? Space.m + 130 : full.width - Space.m - 130
+        let chipWidth = typeSize.isAccessibilitySize ? full.width - Space.m * 2 : min(320, full.width - Space.m * 2)
+        let offset: CGFloat = typeSize.isAccessibilitySize ? 110 : 46
+        let y = center.y + (below ? Self.miniSize.height / 2 + offset : -Self.miniSize.height / 2 - offset)
+        let x = leading ? Space.m + chipWidth / 2 : full.width - Space.m - chipWidth / 2
         ZStack {
             if let s = call.suggestion {
                 SuggestionChip(suggestion: s, isPreview: app.isPreview,
@@ -121,7 +125,7 @@ struct CallView: View {
                     .id(a.id)
             }
         }
-        .frame(width: 260)
+        .frame(width: chipWidth)
         .position(x: x, y: y)
         .animation(Motion.resolved(Motion.sheet, reduceMotion: reduceMotion), value: call.suggestion?.id)
         .animation(Motion.resolved(Motion.sheet, reduceMotion: reduceMotion), value: call.autoShown?.id)

@@ -46,9 +46,9 @@ struct ConversationRow: View {
         HStack(spacing: Space.s) {
             AvatarView(user: conversation.friend, name: conversation.name, size: 44)
             VStack(alignment: .leading, spacing: 2) {
-                HStack {
+                AdaptiveStack(spacing: 2) {
                     Text(conversation.name).font(Typography.friendName).foregroundStyle(Palette.ink)
-                    Spacer()
+                    Spacer(minLength: 0)
                     if let m = conversation.lastMessage {
                         Text(m.createdAt.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
                             .font(.caption).foregroundStyle(Palette.inkTertiary)

@@ -22,7 +22,7 @@ struct FriendProfileView: View {
             if let friend {
                 VStack(spacing: Space.l) {
                     header(friend)
-                    HStack(spacing: Space.s) {
+                    AdaptiveStack(spacing: Space.s) {
                         NudgeButton("Call now", systemImage: "video.fill", kind: .accept, isLoading: calling) {
                             Task { calling = true; await app.callNow(friend); calling = false }
                         }

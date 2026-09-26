@@ -30,25 +30,26 @@ public struct AvatarView: View {
 
     public var body: some View {
         let tint = Palette.Tint.forSeed(seed)
+        // The ring sits inside the frame so ringed and plain avatars align in lists.
+        let gap = ring ? max(3, size * 0.07) : 0
+        let inner = size - gap * 2
         ZStack {
-            Circle().fill(tint.fill)
-            Text(initials)
-                .font(.system(size: size * 0.38, weight: .semibold, design: .rounded))
-                .foregroundStyle(tint.strong)
-            if let url, url.scheme?.hasPrefix("http") == true {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image { image.resizable().scaledToFill() }
+            if ring { Circle().strokeBorder(Palette.mintStrong, lineWidth: max(2, size * 0.045)) }
+            ZStack {
+                Circle().fill(tint.fill)
+                Text(initials)
+                    .font(.system(size: inner * 0.38, weight: .semibold, design: .rounded))
+                    .foregroundStyle(tint.strong)
+                if let url, url.scheme?.hasPrefix("http") == true {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                    }
+                    .clipShape(Circle())
                 }
-                .clipShape(Circle())
-            } else if let url, url.scheme == "asset" {
-                Image(url.host() ?? "").resizable().scaledToFill().clipShape(Circle())
             }
+            .frame(width: inner, height: inner)
         }
         .frame(width: size, height: size)
-        .padding(ring ? max(2, size * 0.06) : 0)
-        .overlay {
-            if ring { Circle().strokeBorder(Palette.mintStrong, lineWidth: max(2, size * 0.05)) }
-        }
         .accessibilityHidden(true)
     }
 }

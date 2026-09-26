@@ -11,19 +11,21 @@ struct NudgeBanner: View {
     let me: PublicUser?
     @State private var dragY: CGFloat = 0
     @State private var accepted = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             HStack(alignment: .center, spacing: Space.s) {
                 AvatarPair(me: me, friend: nudge.friend, friendName: nudge.friendName, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(nudge.title).font(.headline).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(nudge.title).font(.headline).foregroundStyle(Palette.ink).lineLimit(2)
                     Text(windowLine).font(.footnote.weight(.medium)).foregroundStyle(Palette.mintStrong)
                 }
                 Spacer(minLength: 0)
             }
             Text(nudge.body).font(.subheadline).foregroundStyle(Palette.inkSecondary).fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: Space.xs) {
+            let buttons = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: Space.xs)) : AnyLayout(HStackLayout(spacing: Space.xs))
+            buttons {
                 NudgeButton("Skip", kind: .skip, size: .medium) { Task { await app.nudges.skip(nudge) } }
                 NudgeButton("Accept", systemImage: "video.fill", kind: .accept, size: .medium) {
                     accepted = true
@@ -78,7 +80,7 @@ struct WaitingRoomView: View {
     var body: some View {
         if let nudge = app.nudges.waiting {
             let outcome = Outcome(nudge)
-            VStack(spacing: Space.l) {
+            FitOrScroll { VStack(spacing: Space.l) {
                 Spacer()
                 ZStack {
                     if outcome == .waiting && !reduceMotion {
@@ -131,7 +133,7 @@ struct WaitingRoomView: View {
                 }
                 .padding(.horizontal, Space.margin)
                 .padding(.bottom, Space.m)
-            }
+            } }
             .nudgeBackground()
             .animation(Motion.resolved(Motion.move, reduceMotion: reduceMotion), value: outcome)
             .sensoryFeedback(.warning, trigger: outcome == .declined)

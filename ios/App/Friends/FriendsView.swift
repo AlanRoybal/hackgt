@@ -96,6 +96,7 @@ struct FriendsView: View {
 
 struct FreeNowCard: View {
     let friend: Friend
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: Space.xs) {
@@ -104,7 +105,7 @@ struct FreeNowCard: View {
             Text(friend.freeUntil.map { "until \($0.formatted(date: .omitted, time: .shortened))" } ?? "free now")
                 .font(.caption.weight(.medium)).foregroundStyle(Palette.mintStrong)
         }
-        .frame(width: 104)
+        .frame(width: typeSize.isAccessibilitySize ? 220 : 104)
         .padding(.vertical, Space.m)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .accessibilityElement(children: .combine)

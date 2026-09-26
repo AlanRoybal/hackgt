@@ -75,7 +75,7 @@ struct MiniWindow: View {
     var labelText: String {
         switch display {
         case .other: "from \(call.peerName)"
-        case .mine: "you're showing"
+        case .mine: "to \(call.peerName)"
         case .selfView: ""
         }
     }
@@ -113,31 +113,38 @@ struct SuggestionChip: View {
     let onShow: () -> Void
     let onDismiss: () -> Void
     @State private var progress: CGFloat = 1
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: Space.s) {
-                Group {
-                    if isPreview { SceneryPhoto(name: suggestion.query) } else {
-                        AsyncImage(url: suggestion.thumbUrl) { p in
-                            if let img = p.image { img.resizable().scaledToFill() } else { Palette.surfaceAlt }
+            let rows = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.xs)) : AnyLayout(HStackLayout(spacing: Space.s))
+            rows {
+                HStack(spacing: Space.s) {
+                    Group {
+                        if isPreview { SceneryPhoto(name: suggestion.query) } else {
+                            AsyncImage(url: suggestion.thumbUrl) { p in
+                                if let img = p.image { img.resizable().scaledToFill() } else { Palette.surfaceAlt }
+                            }
                         }
                     }
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Show this?").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink).fixedSize()
+                        Text(suggestion.query).font(.caption).foregroundStyle(Palette.inkSecondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
                 }
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Show this?").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
-                    Text(suggestion.query).font(.caption).foregroundStyle(Palette.inkSecondary).lineLimit(1)
+                HStack(spacing: Space.xs) {
+                    if typeSize.isAccessibilitySize { Spacer(minLength: 0) }
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(Palette.inkSecondary)
+                            .frame(width: 32, height: 32).background(Palette.surfaceAlt, in: Circle())
+                    }
+                    .accessibilityLabel("Don't show")
+                    Button("Show", action: onShow)
+                        .buttonStyle(NudgeButtonStyle(.primary, size: .small, fullWidth: false))
                 }
-                Spacer(minLength: 0)
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(Palette.inkSecondary)
-                        .frame(width: 32, height: 32).background(Palette.surfaceAlt, in: Circle())
-                }
-                .accessibilityLabel("Don't show")
-                Button("Show", action: onShow)
-                    .buttonStyle(NudgeButtonStyle(.primary, size: .small, fullWidth: false))
             }
             .padding(Space.xs)
             GeometryReader { g in

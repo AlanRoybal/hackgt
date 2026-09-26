@@ -1,4 +1,4 @@
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// Attaches the friend's avatar to nudge and message notifications.
 final class NotificationService: UNNotificationServiceExtension {
@@ -16,15 +16,17 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(content)
             return
         }
+        nonisolated(unsafe) let mutable = content
+        nonisolated(unsafe) let deliver = contentHandler
         let task = URLSession.shared.downloadTask(with: url) { location, _, _ in
             if let location {
                 let dest = FileManager.default.temporaryDirectory.appending(path: "avatar-\(UUID().uuidString).jpg")
                 try? FileManager.default.moveItem(at: location, to: dest)
                 if let attachment = try? UNNotificationAttachment(identifier: "avatar", url: dest, options: nil) {
-                    content.attachments = [attachment]
+                    mutable.attachments = [attachment]
                 }
             }
-            contentHandler(content)
+            deliver(mutable)
         }
         task.resume()
     }

@@ -15,6 +15,9 @@ enum ScreenshotMode {
         return nil
     }
 
+    /// Screenshot capture of the Reduce Motion variant (the simulator setting needs a respring to apply).
+    static var forceReduceMotion: Bool { ProcessInfo.processInfo.arguments.contains("-forceReduceMotion") }
+
     /// Every screen id the capture script walks through (keep in sync with ios/scripts/screenshots.sh).
     static let all: [String] = [
         "welcome", "signin", "terms", "handle", "phone", "phone-code",
@@ -43,6 +46,7 @@ struct ScreenshotHost: View {
     var body: some View {
         content
             .environment(app)
+            .transformEnvironment(\._accessibilityReduceMotion) { if ScreenshotMode.forceReduceMotion { $0 = true } }
     }
 
     @ViewBuilder var content: some View {
@@ -105,7 +109,10 @@ private struct AddFriendsPreview: View {
 
 @MainActor
 enum MockData {
+    /// Fixed mid-afternoon so "free until" times read naturally in captures.
     static let now = Date()
+    static let afternoonBase = Calendar.current.date(bySettingHour: 15, minute: 32, second: 0, of: Date()) ?? Date()
+    static func afternoon(_ m: Double) -> Date { afternoonBase.addingTimeInterval(m * 60) }
     static func minutes(_ m: Double) -> Date { now.addingTimeInterval(m * 60) }
 
     static let me = UserDTO(id: "u_me", handle: "alan", displayName: "Alan Roybal", phoneVerified: true, tosVersion: "1")
@@ -117,8 +124,8 @@ enum MockData {
 
     static var friends: [Friend] {
         [
-            Friend(user: mom, nickname: "Mom", since: minutes(-90_000), lastCallAt: minutes(-4_000), freeNow: true, freeUntil: minutes(25)),
-            Friend(user: sam, since: minutes(-50_000), lastCallAt: minutes(-12_000), freeNow: true, freeUntil: minutes(55)),
+            Friend(user: mom, nickname: "Mom", since: minutes(-90_000), lastCallAt: minutes(-4_000), freeNow: true, freeUntil: afternoon(25)),
+            Friend(user: sam, since: minutes(-50_000), lastCallAt: minutes(-12_000), freeNow: true, freeUntil: afternoon(55)),
             Friend(user: priya, since: minutes(-30_000), lastCallAt: minutes(-2_000), freeNow: false),
             Friend(user: jordan, since: minutes(-10_000), freeNow: false),
             Friend(user: dad, nickname: "Dad", since: minutes(-90_000), lastCallAt: minutes(-20_000), freeNow: false),
@@ -126,8 +133,8 @@ enum MockData {
     }
 
     static var nudge: Nudge {
-        Nudge(id: "n_1", friend: mom, nickname: "Mom", state: .pending, window: TimeWindow(start: now, end: minutes(10)), minutes: 10,
-              title: "Mom is free too", body: "You and Mom are both free for the next 10 minutes. Call?", expiresAt: minutes(2.7))
+        Nudge(id: "n_1", friend: mom, nickname: "Mom", state: .pending, window: TimeWindow(start: afternoon(0), end: afternoon(10)), minutes: 10,
+              title: "Mom is free too", body: "You and Mom are both free for the next 10 minutes. Call?", expiresAt: Date().addingTimeInterval(161))
     }
 
     static var topics: [Topic] {

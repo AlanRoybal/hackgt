@@ -287,14 +287,16 @@ struct UserResultsList: View {
     var body: some View {
         CardList {
             ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
-                HStack(spacing: Space.s) {
-                    AvatarView(user: r.publicUser, size: 40)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(r.displayName).font(Typography.friendName).foregroundStyle(Palette.ink)
-                        Text("@\(r.handle)").font(.subheadline).foregroundStyle(Palette.inkSecondary)
+                AdaptiveStack(spacing: Space.s) {
+                    HStack(spacing: Space.s) {
+                        AvatarView(user: r.publicUser, size: 40)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(r.displayName).font(Typography.friendName).foregroundStyle(Palette.ink)
+                            Text("@\(r.handle)").font(.subheadline).foregroundStyle(Palette.inkSecondary)
+                        }
+                        Spacer(minLength: 0)
                     }
-                    Spacer()
-                    RelationButton(result: r)
+                    RelationButton(result: r).fixedSize()
                 }
                 .padding(.horizontal, Space.m)
                 .padding(.vertical, Space.s)

@@ -62,24 +62,25 @@ struct Mountain: Shape {
     }
 }
 
-/// Illustrated "video frame" of a person for screenshot mode.
+/// Illustrated "video frame" of a person for screenshot mode: a soft two-tone silhouette in a room.
 struct PreviewVideoFrame: View {
     enum Style { case remote, me }
     let style: Style
 
     var body: some View {
         GeometryReader { g in
-            let w = g.size.width, h = g.size.height
+            let w = g.size.width, h = g.size.height, u = min(w, h)
+            let wall = style == .remote ? Color(red: 0.42, green: 0.39, blue: 0.47) : Color(red: 0.36, green: 0.42, blue: 0.46)
+            let window = style == .remote ? Color(red: 0.52, green: 0.49, blue: 0.56) : Color(red: 0.45, green: 0.52, blue: 0.55)
+            let figure = style == .remote ? Color(red: 0.27, green: 0.24, blue: 0.3) : Color(red: 0.22, green: 0.27, blue: 0.3)
             ZStack {
-                (style == .remote ? Color(red: 0.36, green: 0.33, blue: 0.42) : Color(red: 0.3, green: 0.36, blue: 0.4))
-                Rectangle().fill(style == .remote ? Color(red: 0.46, green: 0.41, blue: 0.5) : Color(red: 0.38, green: 0.45, blue: 0.48))
-                    .frame(width: w * 0.3, height: h).position(x: w * 0.12, y: h / 2)
-                Ellipse().fill(style == .remote ? Color(red: 0.55, green: 0.45, blue: 0.62) : Color(red: 0.42, green: 0.55, blue: 0.62))
-                    .frame(width: w * 0.9, height: h * 0.5).position(x: w * 0.5, y: h * 0.98)
-                Circle().fill(Color(red: 0.87, green: 0.72, blue: 0.62))
-                    .frame(width: min(w, h) * 0.42).position(x: w * 0.5, y: h * 0.5)
-                Capsule().fill(style == .remote ? Color(red: 0.3, green: 0.22, blue: 0.2) : Color(red: 0.2, green: 0.18, blue: 0.16))
-                    .frame(width: min(w, h) * 0.46, height: min(w, h) * 0.2).position(x: w * 0.5, y: h * 0.5 - min(w, h) * 0.18)
+                wall
+                RoundedRectangle(cornerRadius: u * 0.03).fill(window)
+                    .frame(width: w * 0.3, height: h * 0.3).position(x: w * 0.78, y: h * 0.52)
+                RoundedRectangle(cornerRadius: u * 0.02).fill(window.opacity(0.6))
+                    .frame(width: w * 0.1, height: h * 0.16).position(x: w * 0.14, y: h * 0.62)
+                Ellipse().fill(figure).frame(width: u * 0.95, height: u * 0.62).position(x: w * 0.5, y: h * 0.5 + u * 0.62)
+                Circle().fill(figure).frame(width: u * 0.36).position(x: w * 0.5, y: h * 0.5 + u * 0.04)
             }
         }
     }

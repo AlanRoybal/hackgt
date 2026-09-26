@@ -59,6 +59,7 @@ struct SettingsLink<Destination: View>: View {
     let title: String
     let value: String?
     @ViewBuilder let destination: () -> Destination
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         NavigationLink(destination: destination) {
@@ -67,7 +68,7 @@ struct SettingsLink<Destination: View>: View {
                     .frame(width: 30, height: 30).background(tint.fill, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
                 Text(title).font(.body).foregroundStyle(Palette.ink)
                 Spacer()
-                if let value { Text(value).font(.body).foregroundStyle(Palette.inkSecondary) }
+                if let value, !typeSize.isAccessibilitySize { Text(value).font(.body).foregroundStyle(Palette.inkSecondary) }
                 Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.inkTertiary)
             }
             .padding(.horizontal, Space.m)
@@ -142,15 +143,11 @@ struct NudgeSettingsView: View {
             VStack(alignment: .leading, spacing: Space.s) {
                 SectionHeader("Quiet hours")
                 CardList {
-                    DatePicker("Starts", selection: Binding(get: { SettingsStore.date(from: store.settings.quietStart) },
-                                                           set: { d in store.update { $0.quietStart = SettingsStore.hhmm(from: d) } }),
-                               displayedComponents: .hourAndMinute)
-                        .padding(.horizontal, Space.m).frame(minHeight: 52)
+                    TimeRow(title: "Starts", selection: Binding(get: { SettingsStore.date(from: store.settings.quietStart) },
+                                                               set: { d in store.update { $0.quietStart = SettingsStore.hhmm(from: d) } }))
                     RowDivider()
-                    DatePicker("Ends", selection: Binding(get: { SettingsStore.date(from: store.settings.quietEnd) },
-                                                         set: { d in store.update { $0.quietEnd = SettingsStore.hhmm(from: d) } }),
-                               displayedComponents: .hourAndMinute)
-                        .padding(.horizontal, Space.m).frame(minHeight: 52)
+                    TimeRow(title: "Ends", selection: Binding(get: { SettingsStore.date(from: store.settings.quietEnd) },
+                                                             set: { d in store.update { $0.quietEnd = SettingsStore.hhmm(from: d) } }))
                 }
                 Text("No nudges during these hours, in your time zone.").font(.footnote).foregroundStyle(Palette.inkTertiary)
             }
@@ -556,5 +553,28 @@ extension FullTermsView {
                 .navigationTitle("Terms & Privacy")
                 .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+/// Time picker row that stacks label over picker at accessibility sizes.
+struct TimeRow: View {
+    let title: String
+    @Binding var selection: Date
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                Text(title).font(.body).foregroundStyle(Palette.ink).fixedSize()
+                Spacer()
+                DatePicker(title, selection: $selection, displayedComponents: .hourAndMinute).labelsHidden().fixedSize()
+            }
+            VStack(alignment: .leading, spacing: Space.xs) {
+                Text(title).font(.body).foregroundStyle(Palette.ink)
+                DatePicker(title, selection: $selection, displayedComponents: .hourAndMinute).labelsHidden()
+            }
+        }
+        .padding(.horizontal, Space.m)
+        .padding(.vertical, Space.xs)
+        .frame(minHeight: 52)
     }
 }
