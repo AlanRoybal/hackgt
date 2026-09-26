@@ -13,6 +13,7 @@ public final class MemoryStore {
     public var error: String?
     private let api: NudgeAPI
     private var pollTask: Task<Void, Never>?
+    private var photosTask: Task<Void, Never>?
 
     public struct PendingSummary: Identifiable, Hashable, Sendable {
         public var id: String { callId }
@@ -22,14 +23,24 @@ public final class MemoryStore {
         public var durationSec: Int
         public var summary: CallSummary?
         public var memoryAllowed: Bool
+        /// Photos either person showed during the call.
+        public var photos: [CallPhoto]
+        /// Polling gave up before the summary was written; it will still land on the friend's profile.
+        public var summaryTimedOut: Bool
 
-        public init(callId: String, friendId: String, friendName: String, durationSec: Int, summary: CallSummary? = nil, memoryAllowed: Bool = true) {
+        /// Nothing more is coming, so the screen may start its auto-close countdown.
+        public var isSettled: Bool { summary != nil || !memoryAllowed || summaryTimedOut }
+
+        public init(callId: String, friendId: String, friendName: String, durationSec: Int, summary: CallSummary? = nil,
+                    memoryAllowed: Bool = true, photos: [CallPhoto] = [], summaryTimedOut: Bool = false) {
             self.callId = callId
             self.friendId = friendId
             self.friendName = friendName
             self.durationSec = durationSec
             self.summary = summary
             self.memoryAllowed = memoryAllowed
+            self.photos = photos
+            self.summaryTimedOut = summaryTimedOut
         }
     }
 
@@ -60,10 +71,22 @@ public final class MemoryStore {
         do { try await api.deleteAllMemories() } catch { self.error = error.localizedDescription }
     }
 
-    /// Shows the summary screen immediately and polls until topics are ready (≤ 60 s).
+    /// Shows the summary screen immediately, loads the call's photos, and polls until topics are ready (≤ 60 s).
     public func callEnded(callId: String, friendId: String, friendName: String, durationSec: Int, memoryAllowed: Bool) {
         pendingSummary = PendingSummary(callId: callId, friendId: friendId, friendName: friendName, durationSec: durationSec, memoryAllowed: memoryAllowed)
         pollTask?.cancel()
+        photosTask?.cancel()
+        photosTask = Task {
+            // The server may not have recorded the end yet when the other side hung up (409 call_active).
+            for attempt in 0..<4 {
+                if Task.isCancelled { return }
+                if let photos = try? await api.callPhotos(callId: callId) {
+                    if pendingSummary?.callId == callId { pendingSummary?.photos = photos }
+                    return
+                }
+                try? await Task.sleep(for: .seconds(1 + attempt))
+            }
+        }
         guard memoryAllowed else { return }
         pollTask = Task {
             for _ in 0..<20 {
@@ -74,6 +97,7 @@ public final class MemoryStore {
                 }
                 try? await Task.sleep(for: .seconds(3))
             }
+            if !Task.isCancelled, pendingSummary?.callId == callId { pendingSummary?.summaryTimedOut = true }
         }
     }
 
@@ -84,6 +108,7 @@ public final class MemoryStore {
 
     public func dismissSummary() {
         pollTask?.cancel()
+        photosTask?.cancel()
         pendingSummary = nil
     }
 

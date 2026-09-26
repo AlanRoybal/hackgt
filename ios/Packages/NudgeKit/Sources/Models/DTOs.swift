@@ -620,6 +620,23 @@ public struct ShareCreated: Codable, Sendable, Hashable {
     public var thumbUrl: URL
 }
 
+/// A photo either person showed during a call, for the post-call recap. `url` expires after 5 minutes.
+public struct CallPhoto: Codable, Sendable, Hashable, Identifiable {
+    public var shareId: String
+    public var senderId: String
+    public var url: URL
+    public var createdAt: Date
+
+    public var id: String { shareId }
+
+    public init(shareId: String, senderId: String, url: URL, createdAt: Date) {
+        self.shareId = shareId
+        self.senderId = senderId
+        self.url = url
+        self.createdAt = createdAt
+    }
+}
+
 public struct ShareURL: Codable, Sendable, Hashable {
     public var url: URL
     public var expiresAt: Date

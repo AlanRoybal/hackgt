@@ -234,6 +234,9 @@ enum MockData {
         func photo(_ id: String, _ sender: String, _ name: String, qi: Int = 0, ql: Int = 1) -> PhotoRef {
             PhotoRef(shareId: id, senderId: sender, image: .placeholder(name), startedAt: now, durationMs: 6000, queueIndex: qi, queueLength: ql)
         }
+        func recapPhoto(_ name: String, _ sender: String) -> CallPhoto {
+            CallPhoto(shareId: name, senderId: sender, url: URL(string: "https://example.invalid/\(name).jpg")!, createdAt: now)
+        }
         switch screen {
         case "call-connecting": app.call.preview(peer: mom, peerName: "Mom", phase: .connecting)
         case "call-connected": app.call.preview(peer: mom, peerName: "Mom", phase: .connected)
@@ -246,7 +249,8 @@ enum MockData {
         case "call-muted": app.call.preview(peer: mom, peerName: "Mom", phase: .connected, muted: true, cameraOn: false, remoteCameraOff: true)
         case "call-reconnecting": app.call.preview(peer: mom, peerName: "Mom", phase: .reconnecting, poorNetwork: true)
         case "summary":
-            app.memory.preview(friendId: mom.id, memories: Memories(topics: topics), pending: .init(callId: "c_2", friendId: mom.id, friendName: "Mom", durationSec: 754, summary: summaries[0]))
+            app.memory.preview(friendId: mom.id, memories: Memories(topics: topics), pending: .init(callId: "c_2", friendId: mom.id, friendName: "Mom", durationSec: 754, summary: summaries[0],
+                                                                                                    photos: [recapPhoto("hike", me.id), recapPhoto("cake", mom.id), recapPhoto("garden dog", mom.id)]))
         case "summary-pending":
             app.memory.preview(friendId: mom.id, memories: Memories(), pending: .init(callId: "c_2", friendId: mom.id, friendName: "Mom", durationSec: 754))
         default: break
