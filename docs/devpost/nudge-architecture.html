@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nudge — how it fits together</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #FBF8F4; --ink: #1F2330; --accent: #6052BD; --accent-tint: rgba(96,82,189,0.10);
+      --muted: #5B6172; --soft: #7C8291; --link: #3569A5; --rule: rgba(31,35,48,0.12);
+      --sans: 'Geist', sans-serif; --mono: 'Geist Mono', monospace; --serif: 'Instrument Serif', serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--paper); color: var(--ink); font-family: var(--sans); padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    header { width: 100%; max-width: 1040px; }
+    .eyebrow { font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    h1 { font: 400 30px var(--serif); margin-top: 6px; }
+    h1 em { font-style: italic; color: var(--accent); }
+    .diagram { width: 100%; max-width: 1040px; }
+    svg { width: 100%; height: auto; display: block; }
+    .node-name { fill: var(--ink); font: 600 12px var(--sans); text-anchor: middle; }
+    .node-sub { fill: var(--muted); font: 400 9px var(--mono); text-anchor: middle; }
+    .tag { font: 400 7px var(--mono); letter-spacing: 0.08em; text-anchor: middle; }
+    .lbl { font: 400 8px var(--mono); letter-spacing: 0.08em; text-anchor: middle; fill: var(--muted); }
+    .zone-lbl { font: 400 9px var(--mono); letter-spacing: 0.12em; fill: var(--soft); }
+    .legend-t { font: 400 8px var(--mono); letter-spacing: 0.08em; fill: var(--muted); }
+    .n-svc { fill: var(--paper); stroke: var(--ink); stroke-width: 1; }
+    .n-in { fill: rgba(91,97,114,0.10); stroke: var(--soft); stroke-width: 1; }
+    .n-store { fill: rgba(31,35,48,0.05); stroke: var(--muted); stroke-width: 1; }
+    .n-cloud { fill: rgba(31,35,48,0.03); stroke: rgba(31,35,48,0.30); stroke-width: 1; }
+    .n-focal { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.2; }
+    .c { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+    .c-link { fill: none; stroke: var(--link); stroke-width: 1.2; }
+    .c-acc { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+    .c-async { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">Nudge · system architecture</div>
+    <h1>One iPhone app, one AWS stack, <em>zero third-party AI</em></h1>
+  </header>
+  <div class="diagram">
+    <svg viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
+      <title id="arch-title">Nudge system architecture</title>
+      <desc id="arch-desc">The SwiftUI Nudge app reads on-device signals and talks to an AWS serverless backend over API Gateway. Lambdas call Amazon Bedrock for detection, embeddings and summaries and persist to DynamoDB and S3 with S3 Vectors. The phone streams media to Amazon Chime SDK and microphone audio to Amazon Transcribe directly.</desc>
+      <defs>
+        <pattern id="arch-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(31,35,48,0.10)"/></pattern>
+        <marker id="arch-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5B6172"/></marker>
+        <marker id="arch-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3569A5"/></marker>
+        <marker id="arch-arrow-acc" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6052BD"/></marker>
+      </defs>
+      <rect width="1040" height="560" fill="#FBF8F4"/>
+      <rect width="1040" height="560" fill="url(#arch-dots)" opacity="0.55"/>
+
+      <!-- Zones -->
+      <rect x="40" y="80" width="240" height="400" rx="8" fill="rgba(31,35,48,0.03)" stroke="rgba(31,35,48,0.12)" stroke-width="1" stroke-dasharray="4 4"/>
+      <rect x="48" y="84" width="128" height="14" rx="2" fill="#FBF8F4"/>
+      <text x="52" y="94" class="zone-lbl">IPHONE · SWIFT 6</text>
+
+      <rect x="328" y="80" width="672" height="400" rx="8" fill="rgba(31,35,48,0.03)" stroke="rgba(31,35,48,0.12)" stroke-width="1" stroke-dasharray="4 4"/>
+      <rect x="336" y="84" width="236" height="14" rx="2" fill="#FBF8F4"/>
+      <text x="340" y="94" class="zone-lbl">AWS · SERVERLESS · FIRST-PARTY ONLY</text>
+
+      <!-- Connectors (drawn under nodes) -->
+      <!-- signals → app -->
+      <path class="c" d="M160 392 V320" marker-end="url(#arch-arrow)"/>
+      <rect x="170" y="350" width="60" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="174" y="360" class="lbl" text-anchor="start" style="text-anchor:start">FREE/BUSY</text>
+
+      <!-- app → API gateway -->
+      <path class="c-link" d="M256 284 H352" marker-end="url(#arch-arrow-link)"/>
+      <rect x="272" y="264" width="64" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="304" y="273" class="lbl" fill="#3569A5" style="fill:#3569A5">HTTPS · WSS</text>
+
+      <!-- app → Chime -->
+      <path class="c" d="M256 266 H288 Q296 266 296 258 V160 Q296 152 304 152 H352" marker-end="url(#arch-arrow)"/>
+      <rect x="306" y="200" width="40" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="310" y="210" class="lbl" style="text-anchor:start">MEDIA</text>
+
+      <!-- app → Transcribe -->
+      <path class="c" d="M256 302 H304 Q312 302 312 310 V416 Q312 424 320 424 H352" marker-end="url(#arch-arrow)"/>
+      <rect x="322" y="356" width="60" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="326" y="366" class="lbl" style="text-anchor:start">MIC AUDIO</text>
+
+      <!-- API → Lambdas -->
+      <path class="c" d="M512 284 H560" marker-end="url(#arch-arrow)"/>
+
+      <!-- Lambdas → Bedrock (focal) -->
+      <path class="c-acc" d="M688 284 H784" marker-end="url(#arch-arrow-acc)"/>
+      <rect x="694" y="264" width="84" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="736" y="273" class="lbl" style="fill:#6052BD">DETECT · EMBED</text>
+
+      <!-- Lambdas → DynamoDB -->
+      <path class="c" d="M596 320 V392" marker-end="url(#arch-arrow)"/>
+      <rect x="606" y="330" width="36" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="610" y="340" class="lbl" style="text-anchor:start">STATE</text>
+
+      <!-- Lambdas → S3 / S3 Vectors -->
+      <path class="c" d="M652 320 V356 Q652 364 660 364 H872 Q880 364 880 372 V392" marker-end="url(#arch-arrow)"/>
+      <rect x="744" y="344" width="44" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="766" y="353" class="lbl">PHOTOS</text>
+
+      <!-- Lambdas → Chime (create meeting, async) -->
+      <path class="c-async" d="M624 248 V160 Q624 152 616 152 H512" marker-end="url(#arch-arrow)"/>
+      <rect x="634" y="196" width="48" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="638" y="206" class="lbl" style="text-anchor:start">MEETING</text>
+
+      <!-- Nodes: iPhone -->
+      <rect class="n-in" x="64" y="248" width="192" height="72" rx="6"/>
+      <rect x="72" y="256" width="24" height="12" rx="2" fill="transparent" stroke="rgba(124,130,145,0.4)" stroke-width="0.8"/>
+      <text x="84" y="265" class="tag" fill="#7C8291">IOS</text>
+      <text x="160" y="284" class="node-name">Nudge app</text>
+      <text x="160" y="300" class="node-sub">SwiftUI · NudgeKit · Chime SDK</text>
+
+      <rect class="n-in" x="64" y="392" width="192" height="64" rx="6"/>
+      <rect x="72" y="400" width="36" height="12" rx="2" fill="transparent" stroke="rgba(124,130,145,0.4)" stroke-width="0.8"/>
+      <text x="90" y="409" class="tag" fill="#7C8291">DEVICE</text>
+      <text x="160" y="426" class="node-name">On-device signals</text>
+      <text x="160" y="442" class="node-sub">calendar · Focus · motion · photos</text>
+
+      <!-- Nodes: AWS -->
+      <rect class="n-cloud" x="352" y="120" width="160" height="64" rx="6"/>
+      <rect x="360" y="128" width="24" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="372" y="137" class="tag" fill="#7C8291">RTC</text>
+      <text x="432" y="154" class="node-name">Amazon Chime SDK</text>
+      <text x="432" y="170" class="node-sub">1:1 video · data messages</text>
+
+      <rect class="n-svc" x="352" y="248" width="160" height="72" rx="6"/>
+      <rect x="360" y="256" width="24" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="372" y="265" class="tag" fill="#7C8291">API</text>
+      <text x="432" y="284" class="node-name">API Gateway</text>
+      <text x="432" y="300" class="node-sub">REST + WS · Cognito JWT</text>
+
+      <rect class="n-cloud" x="352" y="392" width="160" height="64" rx="6"/>
+      <rect x="360" y="400" width="24" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="372" y="409" class="tag" fill="#7C8291">ASR</text>
+      <text x="432" y="426" class="node-name">Amazon Transcribe</text>
+      <text x="432" y="442" class="node-sub">streaming · SigV4 on device</text>
+
+      <rect class="n-svc" x="560" y="248" width="128" height="72" rx="6"/>
+      <rect x="568" y="256" width="20" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="578" y="265" class="tag" fill="#7C8291">FN</text>
+      <text x="624" y="284" class="node-name">Lambdas</text>
+      <text x="624" y="300" class="node-sub">Node 22 · ARM64 · CDK</text>
+
+      <rect class="n-store" x="560" y="392" width="128" height="64" rx="6"/>
+      <rect x="568" y="400" width="20" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="578" y="409" class="tag" fill="#7C8291">DB</text>
+      <text x="624" y="426" class="node-name">DynamoDB</text>
+      <text x="624" y="442" class="node-sub">single table · TTL</text>
+
+      <rect class="n-focal" x="784" y="248" width="192" height="72" rx="6"/>
+      <rect x="792" y="256" width="20" height="12" rx="2" fill="transparent" stroke="rgba(96,82,189,0.5)" stroke-width="0.8"/>
+      <text x="802" y="265" class="tag" fill="#6052BD">AI</text>
+      <text x="880" y="284" class="node-name" style="fill:#6052BD">Amazon Bedrock</text>
+      <text x="880" y="300" class="node-sub">Nova Lite · Titan Multimodal G1</text>
+
+      <rect class="n-store" x="784" y="392" width="192" height="64" rx="6"/>
+      <rect x="792" y="400" width="24" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="804" y="409" class="tag" fill="#7C8291">OBJ</text>
+      <text x="880" y="426" class="node-name">S3 + S3 Vectors</text>
+      <text x="880" y="442" class="node-sub">30-day photos · 1024-d cosine</text>
+
+      <!-- Legend -->
+      <line x1="40" y1="504" x2="1000" y2="504" stroke="rgba(31,35,48,0.12)" stroke-width="1"/>
+      <rect x="40" y="518" width="14" height="10" rx="2" class="n-in"/>
+      <text x="62" y="526" class="legend-t">ON THE PHONE</text>
+      <rect x="160" y="518" width="14" height="10" rx="2" class="n-svc"/>
+      <text x="182" y="526" class="legend-t">OUR CODE</text>
+      <rect x="260" y="518" width="14" height="10" rx="2" class="n-cloud"/>
+      <text x="282" y="526" class="legend-t">AWS MANAGED SERVICE</text>
+      <rect x="420" y="518" width="14" height="10" rx="2" class="n-store"/>
+      <text x="442" y="526" class="legend-t">STORAGE</text>
+      <rect x="512" y="518" width="14" height="10" rx="2" class="n-focal"/>
+      <text x="534" y="526" class="legend-t">AI MODELS</text>
+      <line x1="612" y1="523" x2="640" y2="523" class="c-async"/>
+      <text x="648" y="526" class="legend-t">SERVER-SIDE SETUP</text>
+      <line x1="776" y1="523" x2="804" y2="523" class="c-link"/>
+      <text x="812" y="526" class="legend-t">AUTHENTICATED API</text>
+    </svg>
+  </div>
+</body>
+</html>

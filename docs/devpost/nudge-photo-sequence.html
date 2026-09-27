@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nudge — a spoken memory becomes a shared photo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #FBF8F4; --ink: #1F2330; --accent: #6052BD; --accent-tint: rgba(96,82,189,0.10);
+      --muted: #5B6172; --soft: #7C8291; --link: #3569A5;
+      --sans: 'Geist', sans-serif; --mono: 'Geist Mono', monospace; --serif: 'Instrument Serif', serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--paper); color: var(--ink); font-family: var(--sans); padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    header { width: 100%; max-width: 1040px; }
+    .eyebrow { font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    h1 { font: 400 30px var(--serif); margin-top: 6px; }
+    h1 em { font-style: italic; color: var(--accent); }
+    .diagram { width: 100%; max-width: 1040px; }
+    svg { width: 100%; height: auto; display: block; }
+    .actor-name { fill: var(--ink); font: 600 12px var(--sans); text-anchor: middle; }
+    .actor-sub { fill: var(--muted); font: 400 9px var(--mono); text-anchor: middle; }
+    .tag { font: 400 7px var(--mono); letter-spacing: 0.08em; text-anchor: middle; }
+    .lbl { font: 400 8px var(--mono); letter-spacing: 0.08em; text-anchor: middle; fill: var(--muted); }
+    .life { stroke: rgba(31,35,48,0.22); stroke-width: 1; stroke-dasharray: 3 3; }
+    .act { fill: rgba(31,35,48,0.06); stroke: var(--muted); stroke-width: 0.8; }
+    .m { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+    .m-ret { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; }
+    .m-link { fill: none; stroke: var(--link); stroke-width: 1.2; }
+    .m-acc { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+    .callout { fill: var(--muted); font: italic 14px var(--serif); text-anchor: middle; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">Nudge · in-call photo retrieval</div>
+    <h1>You say “remember the lake trip?” — <em>the photo shows up</em></h1>
+  </header>
+  <div class="diagram">
+    <svg viewBox="0 0 1040 648" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="seq-title seq-desc">
+      <title id="seq-title">A spoken photo reference becomes a shared photo</title>
+      <desc id="seq-desc">Sequence diagram. Your iPhone streams microphone audio to Amazon Transcribe and forwards the final transcript segment to the Nudge backend over WebSocket. The backend asks Amazon Bedrock Nova Lite whether the sentence references a photo, embeds the query with Titan, searches S3 Vectors scoped to the speaker, and pushes a private suggestion back to the speaker. Only if the speaker taps Show is the photo sent to the friend's phone over an Amazon Chime data message.</desc>
+      <defs>
+        <pattern id="seq-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(31,35,48,0.10)"/></pattern>
+        <marker id="seq-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5B6172"/></marker>
+        <marker id="seq-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3569A5"/></marker>
+        <marker id="seq-arrow-acc" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6052BD"/></marker>
+        <marker id="seq-arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#5B6172" stroke-width="1"/></marker>
+      </defs>
+      <rect width="1040" height="648" fill="#FBF8F4"/>
+      <rect width="1040" height="648" fill="url(#seq-dots)" opacity="0.55"/>
+
+      <!-- Lifelines: 120 320 520 720 920 -->
+      <line class="life" x1="120" y1="128" x2="120" y2="616"/>
+      <line class="life" x1="320" y1="128" x2="320" y2="616"/>
+      <line class="life" x1="520" y1="128" x2="520" y2="616"/>
+      <line class="life" x1="720" y1="128" x2="720" y2="616"/>
+      <line class="life" x1="920" y1="128" x2="920" y2="616"/>
+
+      <!-- Activation bars -->
+      <rect class="act" x="316" y="172" width="8" height="40"/>
+      <rect class="act" x="516" y="244" width="8" height="240"/>
+      <rect class="act" x="716" y="284" width="8" height="40"/>
+      <rect class="act" x="716" y="348" width="8" height="40"/>
+
+      <!-- opt fragment: the human gate -->
+      <rect x="104" y="512" width="832" height="88" rx="4" fill="none" stroke="rgba(31,35,48,0.30)" stroke-width="1"/>
+      <rect x="104" y="512" width="40" height="16" fill="rgba(31,35,48,0.06)" stroke="rgba(31,35,48,0.30)" stroke-width="1"/>
+      <text x="124" y="523" class="lbl" style="fill:#1F2330">OPT</text>
+      <rect x="148" y="515" width="440" height="13" rx="2" fill="#FBF8F4"/>
+      <text x="152" y="524" class="lbl" style="text-anchor:start">[YOU TAP “SHOW” — OTHERWISE THE PHOTO NEVER LEAVES YOUR PHONE]</text>
+
+      <!-- Messages -->
+      <line class="m-link" x1="120" y1="176" x2="316" y2="176" marker-end="url(#seq-arrow-link)"/>
+      <rect x="184" y="160" width="72" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="220" y="170" class="lbl" style="fill:#3569A5">16 KHZ PCM</text>
+
+      <line class="m-ret" x1="316" y1="208" x2="120" y2="208" marker-end="url(#seq-arrow)"/>
+      <rect x="180" y="192" width="80" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="220" y="202" class="lbl">FINAL SEGMENT</text>
+
+      <line class="m-link" x1="120" y1="248" x2="516" y2="248" marker-end="url(#seq-arrow-link)"/>
+      <rect x="378" y="232" width="84" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="420" y="242" class="lbl" style="fill:#3569A5">WS TRANSCRIPT</text>
+
+      <line class="m" x1="524" y1="288" x2="716" y2="288" marker-end="url(#seq-arrow)"/>
+      <rect x="580" y="272" width="80" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="620" y="282" class="lbl">NOVA: DETECT</text>
+
+      <line class="m-ret" x1="716" y1="320" x2="524" y2="320" marker-end="url(#seq-arrow)"/>
+      <rect x="584" y="304" width="72" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="620" y="314" class="lbl">QUERY TEXT</text>
+
+      <line class="m" x1="524" y1="352" x2="716" y2="352" marker-end="url(#seq-arrow)"/>
+      <rect x="584" y="336" width="72" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="620" y="346" class="lbl">TITAN: EMBED</text>
+
+      <line class="m-ret" x1="716" y1="384" x2="524" y2="384" marker-end="url(#seq-arrow)"/>
+      <rect x="580" y="368" width="80" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="620" y="378" class="lbl">1024-D VECTOR</text>
+
+      <path class="m" d="M528 416 L564 416 L564 440 L528 440" marker-end="url(#seq-arrow)"/>
+      <rect x="572" y="422" width="128" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="576" y="432" class="lbl" style="text-anchor:start">S3 VECTORS · YOUR PHOTOS ONLY</text>
+
+      <line class="m-ret" x1="516" y1="480" x2="120" y2="480" marker-end="url(#seq-arrow-open)"/>
+      <rect x="180" y="464" width="80" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="220" y="474" class="lbl">SUGGESTION</text>
+
+      <line class="m-acc" x1="120" y1="568" x2="920" y2="568" marker-end="url(#seq-arrow-acc)"/>
+      <rect x="774" y="552" width="92" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="820" y="562" class="lbl" style="fill:#6052BD">PHOTO IN CALL</text>
+
+      <!-- Timing callout (empty region between backend and Bedrock lifelines) -->
+      <text x="620" y="182" class="callout">spoken word → suggestion</text>
+      <text x="620" y="202" class="callout">p50 1.0 s, p95 1.0 s</text>
+
+      <!-- Actors -->
+      <rect x="40" y="72" width="160" height="56" rx="6" fill="#FBF8F4"/>
+      <rect x="40" y="72" width="160" height="56" rx="6" fill="rgba(91,97,114,0.10)" stroke="#7C8291" stroke-width="1"/>
+      <rect x="48" y="80" width="24" height="12" rx="2" fill="transparent" stroke="rgba(124,130,145,0.4)" stroke-width="0.8"/>
+      <text x="60" y="89" class="tag" fill="#7C8291">YOU</text>
+      <text x="120" y="104" class="actor-name">Your iPhone</text>
+      <text x="120" y="119" class="actor-sub">Nudge app · mic</text>
+
+      <rect x="240" y="72" width="160" height="56" rx="6" fill="#FBF8F4"/>
+      <rect x="240" y="72" width="160" height="56" rx="6" fill="rgba(31,35,48,0.03)" stroke="rgba(31,35,48,0.30)" stroke-width="1"/>
+      <rect x="248" y="80" width="24" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="260" y="89" class="tag" fill="#7C8291">ASR</text>
+      <text x="320" y="104" class="actor-name">Amazon Transcribe</text>
+      <text x="320" y="119" class="actor-sub">streaming</text>
+
+      <rect x="440" y="72" width="160" height="56" rx="6" fill="#FBF8F4"/>
+      <rect x="440" y="72" width="160" height="56" rx="6" fill="#FBF8F4" stroke="#1F2330" stroke-width="1"/>
+      <rect x="448" y="80" width="24" height="12" rx="2" fill="transparent" stroke="rgba(31,35,48,0.22)" stroke-width="0.8"/>
+      <text x="460" y="89" class="tag" fill="#7C8291">SVC</text>
+      <text x="520" y="104" class="actor-name">Nudge backend</text>
+      <text x="520" y="119" class="actor-sub">Lambda · WebSocket</text>
+
+      <rect x="640" y="72" width="160" height="56" rx="6" fill="#FBF8F4"/>
+      <rect x="640" y="72" width="160" height="56" rx="6" fill="rgba(96,82,189,0.10)" stroke="#6052BD" stroke-width="1"/>
+      <rect x="648" y="80" width="20" height="12" rx="2" fill="transparent" stroke="rgba(96,82,189,0.5)" stroke-width="0.8"/>
+      <text x="658" y="89" class="tag" fill="#6052BD">AI</text>
+      <text x="720" y="104" class="actor-name" style="fill:#6052BD">Amazon Bedrock</text>
+      <text x="720" y="119" class="actor-sub">Nova Lite · Titan</text>
+
+      <rect x="840" y="72" width="160" height="56" rx="6" fill="#FBF8F4"/>
+      <rect x="840" y="72" width="160" height="56" rx="6" fill="rgba(91,97,114,0.10)" stroke="#7C8291" stroke-width="1"/>
+      <rect x="848" y="80" width="36" height="12" rx="2" fill="transparent" stroke="rgba(124,130,145,0.4)" stroke-width="0.8"/>
+      <text x="866" y="89" class="tag" fill="#7C8291">FRIEND</text>
+      <text x="920" y="104" class="actor-name">Friend's iPhone</text>
+      <text x="920" y="119" class="actor-sub">Chime data channel</text>
+    </svg>
+  </div>
+</body>
+</html>
