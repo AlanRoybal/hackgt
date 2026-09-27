@@ -5,25 +5,23 @@ import Testing
 
 @Suite("CallMediaExport — post-call save & share", .serialized)
 struct CallMediaExportTests {
-    private func item(_ id: String, kind: CallPhoto.Kind = .photo, url: String = "https://s3.test/photos/u/a.jpg?sig=1", video: String? = nil) -> CallPhoto {
-        CallPhoto(shareId: id, senderId: "u_1", kind: kind, url: URL(string: url)!, videoUrl: video.flatMap(URL.init(string:)), createdAt: .now)
+    private func item(_ id: String, kind: MediaType? = nil, url: String = "https://s3.test/photos/u/a.jpg?sig=1", video: String? = nil) -> CallPhoto {
+        CallPhoto(shareId: id, senderId: "u_1", url: URL(string: url)!, createdAt: .now, mediaType: kind, videoUrl: video.flatMap(URL.init(string:)))
     }
 
     @Test func decodesPhotosFromServersWithoutVideo() throws {
         let json = #"{"shareId":"s_1","senderId":"u_1","url":"https://x/a.jpg","createdAt":"2026-09-26T15:00:00.000Z"}"#
         let p = try NudgeJSON.decoder().decode(CallPhoto.self, from: Data(json.utf8))
-        #expect(p.kind == .photo && !p.isVideo && p.exportURL.absoluteString == "https://x/a.jpg")
+        #expect(p.mediaType == nil && !p.isVideo && p.exportURL.absoluteString == "https://x/a.jpg")
     }
 
     @Test func decodesVideosAndExportsTheClip() throws {
-        let json = #"{"shareId":"s_2","senderId":"u_1","kind":"video","url":"https://x/a.jpg","videoUrl":"https://x/a.mp4","createdAt":"2026-09-26T15:00:00Z"}"#
+        let json = #"{"shareId":"s_2","senderId":"u_1","mediaType":"video","url":"https://x/a.jpg","videoUrl":"https://x/a.mp4","createdAt":"2026-09-26T15:00:00Z"}"#
         let v = try NudgeJSON.decoder().decode(CallPhoto.self, from: Data(json.utf8))
         #expect(v.isVideo && v.exportURL.absoluteString == "https://x/a.mp4")
     }
 
-    @Test func unknownKindsOrMissingClipsFallBackToTheImage() throws {
-        let json = #"{"shareId":"s_3","senderId":"u_1","kind":"hologram","url":"https://x/a.jpg","createdAt":"2026-09-26T15:00:00Z"}"#
-        #expect(try NudgeJSON.decoder().decode(CallPhoto.self, from: Data(json.utf8)).kind == .photo)
+    @Test func videosWithoutAClipExportTheImage() {
         let clipless = item("s_4", kind: .video)
         #expect(!clipless.isVideo && clipless.exportURL == clipless.url)
     }

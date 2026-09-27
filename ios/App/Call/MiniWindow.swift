@@ -1,3 +1,4 @@
+import AVFoundation
 import Calls
 import DesignSystem
 import Models
@@ -48,6 +49,7 @@ struct MiniWindow: View {
 }
 
 /// The shared photo, full screen: fitted so nothing is cropped, over a blurred fill of itself.
+/// A shared video plays once, muted, over its poster frame (VID-4).
 /// A top scrim keeps the call header readable over bright photos.
 struct SharedPhotoStage: View {
     let photo: PhotoRef
@@ -60,13 +62,75 @@ struct SharedPhotoStage: View {
                 .blur(radius: 40)
                 .overlay(Color.black.opacity(0.35))
                 .accessibilityHidden(true)
-            PhotoContent(image: photo.image, contentMode: .fit)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(isMine ? "Photo you're showing to \(peerName)" : "Photo from \(peerName)")
+            Group {
+                if case .video(let url, _) = photo.image {
+                    ZStack {
+                        PhotoContent(image: photo.image, contentMode: .fit)
+                        ClipPlayer(url: url)
+                    }
+                } else {
+                    PhotoContent(image: photo.image, contentMode: .fit)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
             LinearGradient(colors: [.black.opacity(0.6), .black.opacity(0.3), .clear], startPoint: .top, endPoint: .bottom)
                 .frame(height: 220)
                 .allowsHitTesting(false)
         }
+    }
+
+    var label: String {
+        let kind = photo.image.isVideo ? "Video" : "Photo"
+        return isMine ? "\(kind) you're showing to \(peerName)" : "\(kind) from \(peerName)"
+    }
+}
+
+/// Plays a short clip once, muted, with no controls. Muted because the call's echo canceller doesn't hear
+/// app playback, so the clip's sound would reach the other phone twice through the mic (D-311).
+struct ClipPlayer: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> PlayerView {
+        let view = PlayerView()
+        let player = AVPlayer(url: url)
+        player.isMuted = true
+        player.actionAtItemEnd = .pause // hold the last frame until the stage dissolves
+        view.playerLayer.videoGravity = .resizeAspect
+        view.playerLayer.player = player
+        player.play()
+        return view
+    }
+
+    func updateUIView(_ view: PlayerView, context: Context) {}
+
+    static func dismantleUIView(_ view: PlayerView, coordinator: ()) {
+        view.playerLayer.player?.pause()
+        view.playerLayer.player = nil
+    }
+
+    final class PlayerView: UIView {
+        override class var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    }
+}
+
+/// A shared video's exit: it blurs, swells slightly and fades, rather than cutting back to the call.
+struct Dissipate: ViewModifier {
+    let amount: CGFloat
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: 28 * amount)
+            .scaleEffect(1 + 0.06 * amount)
+            .opacity(1 - amount)
+    }
+}
+
+extension AnyTransition {
+    static func sharedStage(isVideo: Bool, reduceMotion: Bool) -> AnyTransition {
+        guard isVideo, !reduceMotion else { return .opacity }
+        return .asymmetric(insertion: .opacity,
+                           removal: .modifier(active: Dissipate(amount: 1), identity: Dissipate(amount: 0)))
     }
 }
 
@@ -79,6 +143,9 @@ struct SharedPhotoLabel: View {
 
     var body: some View {
         HStack(spacing: Space.xs) {
+            if photo.image.isVideo {
+                Image(systemName: "play.rectangle.fill").font(.subheadline).foregroundStyle(.white).accessibilityHidden(true)
+            }
             if photo.queueLength > 1 {
                 HStack(spacing: 4) {
                     ForEach(0..<min(photo.queueLength, 5), id: \.self) { i in
@@ -96,7 +163,7 @@ struct SharedPhotoLabel: View {
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }
                 .padding(.vertical, -8).padding(.trailing, -10)
-                .accessibilityLabel("Stop showing photo")
+                .accessibilityLabel(photo.image.isVideo ? "Stop showing video" : "Stop showing photo")
             }
         }
         .padding(.horizontal, Space.s).padding(.vertical, Space.xs)
@@ -126,6 +193,9 @@ struct PhotoContent: View {
             if let ui = UIImage(data: data) { Image(uiImage: ui).resizable().aspectRatio(contentMode: contentMode) } else { Color(white: 0.2) }
         case .placeholder(let name):
             if contentMode == .fit { SceneryPhoto(name: name).aspectRatio(3 / 4, contentMode: .fit) } else { SceneryPhoto(name: name) }
+        case .video(_, let poster):
+            // The poster frame; `ClipPlayer` draws the moving picture over it.
+            if let poster { PhotoContent(image: .url(poster), contentMode: contentMode) } else { Color.black }
         }
     }
 }
@@ -155,7 +225,7 @@ struct SuggestionCard: View {
             }
             .tinderSwipe(offset: $swipe) { $0 == .right ? onShow() : onDismiss() }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Photo suggestion: \(suggestion.query)")
+            .accessibilityLabel("\(suggestion.isVideo ? "Video" : "Photo") suggestion: \(suggestion.query)")
     }
 
     var card: some View {
@@ -169,9 +239,11 @@ struct SuggestionCard: View {
                     }
                 }
                 .frame(width: 88, height: 88)
+                .overlay(alignment: .bottomLeading) { if suggestion.isVideo { VideoBadge(durationMs: suggestion.durationMs).padding(Space.xxs) } }
                 .clipShape(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
                 VStack(alignment: .leading, spacing: Space.xxs) {
-                    Text("Show this to \(peerName)?").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                    Text(suggestion.isVideo ? "Show this video to \(peerName)?" : "Show this to \(peerName)?")
+                        .font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
                     Text(suggestion.query).font(.subheadline).foregroundStyle(Palette.inkSecondary).lineLimit(2)
                 }
                 Spacer(minLength: 0)
@@ -180,7 +252,7 @@ struct SuggestionCard: View {
             buttons {
                 Button("Not now", action: onDismiss)
                     .buttonStyle(NudgeButtonStyle(.secondary))
-                Button(action: onShow) { Label("Show", systemImage: "photo.fill") }
+                Button(action: onShow) { Label(suggestion.isVideo ? "Play" : "Show", systemImage: suggestion.isVideo ? "play.fill" : "photo.fill") }
                     .buttonStyle(NudgeButtonStyle(.primary))
             }
             GeometryReader { g in
@@ -192,6 +264,27 @@ struct SuggestionCard: View {
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .environment(\.colorScheme, .light)
         .onAppear { withAnimation(.linear(duration: isPreview ? 0 : 8)) { progress = isPreview ? 0.62 : 0 } }
+    }
+}
+
+/// A play glyph and the clip's length, over a video's thumbnail.
+struct VideoBadge: View {
+    let durationMs: Int?
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "play.fill")
+            if let durationMs { Text(Self.format(durationMs)).monospacedDigit() }
+        }
+        .font(.caption2.weight(.bold)).foregroundStyle(.white)
+        .padding(.horizontal, 6).padding(.vertical, 3)
+        .background(.black.opacity(0.55), in: Capsule())
+        .accessibilityHidden(true)
+    }
+
+    static func format(_ ms: Int) -> String {
+        let s = max(1, Int((Double(ms) / 1000).rounded()))
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 }
 

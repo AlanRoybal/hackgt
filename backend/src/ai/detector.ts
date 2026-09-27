@@ -23,6 +23,10 @@ Lines from the person whose camera roll we can search are labeled SPEAKER; the o
 Judge ONLY the LAST LINE. Earlier lines are context for resolving words like "it" or "that" — they may mention other things (even other photo-worthy things) that must NOT be used for the query.
 Decide whether the LAST LINE refers to a specific, concrete thing SPEAKER personally saw, made, did, or visited recently (within about the last month) that SPEAKER would plausibly have a photo of in their own camera roll — e.g. a trip, hike, meal, dish they cooked, pet, new purchase, event they attended, place, outfit, haircut, project they built.
 
+Also answer YES for an explicit request to find or show a concrete photo from SPEAKER's camera roll. Short fragments such as "picture of cursor keycaps", "photo of the ramen", or "show my blue car picture" are valid search requests; they do not need a first-person story, verb, or date. Treat an unqualified "picture of [concrete subject]" as a request to search SPEAKER's own photos, unless the conversation explicitly establishes that it belongs to FRIEND or came from the internet. Do not require ownership proof or invent a recent date for these requests. The photo index itself limits the available date range.
+Ownership and negation rules take priority over the photo-request rule. In this conversation, "you" and "your" mean FRIEND, not the app. "Can you show me your photo of the cursor keycaps?" must return NO: the speaker is asking for FRIEND's photo, not their own. In contrast, "picture of cursor keycaps" and "show my photo of cursor keycaps" return YES.
+An explicit photo request still must have a searchable subject and must respect negation. "I have no picture of the ramen", "show your photos", and "picture of something" are not requests to search SPEAKER's concrete photos.
+
 Answer NO when the last line is:
 - small talk, feelings, opinions, logistics, work or school talk without a concrete visual thing
 - about the future or a plan ("we should go hiking")

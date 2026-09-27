@@ -196,23 +196,74 @@ public struct Friend: Codable, Sendable, Hashable, Identifiable {
     public var lastCallAt: Date?
     public var freeNow: Bool
     public var freeUntil: Date?
+    /// When the current busy stretch ends; nil when free or when the server has nothing fresh.
+    public var busyUntil: Date?
 
     public var id: String { user.id }
     /// The name this viewer sees everywhere: their private nickname, else the display name.
     public var name: String { nickname?.nonEmpty ?? user.displayName }
 
-    public init(user: PublicUser, nickname: String? = nil, since: Date, lastCallAt: Date? = nil, freeNow: Bool = false, freeUntil: Date? = nil) {
+    public init(user: PublicUser, nickname: String? = nil, since: Date, lastCallAt: Date? = nil, freeNow: Bool = false, freeUntil: Date? = nil, busyUntil: Date? = nil) {
         self.user = user
         self.nickname = nickname
         self.since = since
         self.lastCallAt = lastCallAt
         self.freeNow = freeNow
         self.freeUntil = freeUntil
+        self.busyUntil = busyUntil
+    }
+
+    /// The next moment this status stops being true: the free window closing or the busy stretch ending.
+    public var statusChangesAt: Date? { freeNow ? freeUntil : busyUntil }
+
+    /// Compact, date-aware text shared by cards, rows, and profiles (e.g. "Sun 3 PM").
+    public func freeUntilText(now: Date = Date(), calendar: Calendar = .current) -> String? {
+        guard let until = freeUntil else { return nil }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now),
+                                           to: calendar.startOfDay(for: until)).day ?? 0
+        let day = days == 0 ? "" : (days > 0 && days < 7 ? "EEE" : "MMMd")
+        let time = calendar.component(.minute, from: until) == 0 ? "j" : "jm"
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate(day + time)
+        return formatter.string(from: until)
     }
 }
 
 public enum Relation: String, Codable, Sendable {
     case none, requested, incoming, friends, blocked
+}
+
+/// What this phone hands to the other one when they're held together (ACC-13).
+public struct TapToken: Codable, Sendable, Hashable {
+    public var token: String
+    public var expiresAt: Date
+
+    public init(token: String, expiresAt: Date) {
+        self.token = token
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct TapResult: Codable, Sendable, Hashable {
+    public enum Status: String, Codable, Sendable {
+        /// Only this phone's tap has landed so far; ask again.
+        case pending
+        /// Friends because of this tap.
+        case friends
+        /// Were already friends; nothing changed.
+        case alreadyFriends = "already_friends"
+    }
+
+    public var status: Status
+    /// Who they are, once they're friends (never while pending).
+    public var user: PublicUser?
+
+    public init(status: Status, user: PublicUser?) {
+        self.status = status
+        self.user = user
+    }
 }
 
 public struct SearchResult: Codable, Sendable, Hashable, Identifiable {
@@ -469,6 +520,8 @@ public struct CallJoin: Codable, Sendable, Hashable {
 
 public struct PhotoStatus: Codable, Sendable, Hashable {
     public var indexed: Int
+    /// How many of `indexed` are short videos.
+    public var videos: Int?
     public var excluded: Int
     public var pending: Int
     public var failed: Int
@@ -565,6 +618,11 @@ public struct DeviceRegistration: Codable, Sendable, Hashable {
     }
 }
 
+/// Whether an indexed item is a still photo or a short video (VID-1).
+public enum MediaType: String, Codable, Sendable, Hashable {
+    case photo, video
+}
+
 public struct PhotoUploadItem: Codable, Sendable, Hashable {
     public var assetHash: String
     public var takenAt: Date
@@ -572,20 +630,28 @@ public struct PhotoUploadItem: Codable, Sendable, Hashable {
     public var isScreenshot: Bool
     public var width: Int
     public var height: Int
+    public var mediaType: MediaType?
+    public var durationMs: Int?
 
-    public init(assetHash: String, takenAt: Date, place: String?, isScreenshot: Bool, width: Int, height: Int) {
+    public init(assetHash: String, takenAt: Date, place: String?, isScreenshot: Bool, width: Int, height: Int,
+                mediaType: MediaType? = nil, durationMs: Int? = nil) {
         self.assetHash = assetHash
         self.takenAt = takenAt
         self.place = place
         self.isScreenshot = isScreenshot
         self.width = width
         self.height = height
+        self.mediaType = mediaType
+        self.durationMs = durationMs
     }
 }
 
 public struct PhotoUploadTicket: Codable, Sendable, Hashable {
     public var assetHash: String
+    /// The JPEG (a video's poster frame).
     public var uploadUrl: URL
+    /// The MP4, for videos only.
+    public var videoUploadUrl: URL?
 }
 
 public struct PhotoUploadsResponse: Codable, Sendable, Hashable {
@@ -601,10 +667,16 @@ public struct PhotoSuggestion: Codable, Sendable, Hashable, Identifiable {
     public var query: String
     public var confidence: Double
     public var auto: Bool
+    /// Set for a short video: `thumbUrl` is its poster frame and `videoUrl` the clip (5-minute link).
+    public var mediaType: MediaType?
+    public var durationMs: Int?
+    public var videoUrl: URL?
 
     public var id: String { suggestionId }
+    public var isVideo: Bool { mediaType == .video && videoUrl != nil }
 
-    public init(callId: String, suggestionId: String, photoId: String, thumbUrl: URL, query: String, confidence: Double, auto: Bool) {
+    public init(callId: String, suggestionId: String, photoId: String, thumbUrl: URL, query: String, confidence: Double, auto: Bool,
+                mediaType: MediaType? = nil, durationMs: Int? = nil, videoUrl: URL? = nil) {
         self.callId = callId
         self.suggestionId = suggestionId
         self.photoId = photoId
@@ -612,55 +684,52 @@ public struct PhotoSuggestion: Codable, Sendable, Hashable, Identifiable {
         self.query = query
         self.confidence = confidence
         self.auto = auto
+        self.mediaType = mediaType
+        self.durationMs = durationMs
+        self.videoUrl = videoUrl
     }
 }
 
 public struct ShareCreated: Codable, Sendable, Hashable {
     public var shareId: String
     public var thumbUrl: URL
+    public var mediaType: MediaType?
+    public var durationMs: Int?
+    public var videoUrl: URL?
 }
 
 /// A photo or video either person showed during a call, for the post-call recap. URLs expire after 5 minutes.
-/// For a video, `url` is its poster frame and `videoUrl` the clip; servers that predate video send neither `kind` nor `videoUrl`.
 public struct CallPhoto: Codable, Sendable, Hashable, Identifiable {
-    public enum Kind: String, Codable, Sendable, Hashable { case photo, video }
-
     public var shareId: String
     public var senderId: String
-    public var kind: Kind
     public var url: URL
-    public var videoUrl: URL?
     public var createdAt: Date
+    /// Set for a short video: `url` is its poster frame and `videoUrl` the clip.
+    public var mediaType: MediaType?
+    public var videoUrl: URL?
 
     public var id: String { shareId }
-    public var isVideo: Bool { kind == .video && videoUrl != nil }
+    public var isVideo: Bool { mediaType == .video && videoUrl != nil }
     /// What to save or share: the clip for a video, the image otherwise.
     public var exportURL: URL { isVideo ? videoUrl ?? url : url }
 
-    public init(shareId: String, senderId: String, kind: Kind = .photo, url: URL, videoUrl: URL? = nil, createdAt: Date) {
+    public init(shareId: String, senderId: String, url: URL, createdAt: Date, mediaType: MediaType? = nil, videoUrl: URL? = nil) {
         self.shareId = shareId
         self.senderId = senderId
-        self.kind = kind
         self.url = url
-        self.videoUrl = videoUrl
         self.createdAt = createdAt
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        shareId = try c.decode(String.self, forKey: .shareId)
-        senderId = try c.decode(String.self, forKey: .senderId)
-        // An unknown kind from a newer server falls back to a photo: its `url` is always an image.
-        kind = (try? c.decodeIfPresent(Kind.self, forKey: .kind)) ?? .photo
-        url = try c.decode(URL.self, forKey: .url)
-        videoUrl = try c.decodeIfPresent(URL.self, forKey: .videoUrl)
-        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        self.mediaType = mediaType
+        self.videoUrl = videoUrl
     }
 }
 
 public struct ShareURL: Codable, Sendable, Hashable {
+    /// The still image (a video's poster frame).
     public var url: URL
     public var expiresAt: Date
+    public var mediaType: MediaType?
+    public var durationMs: Int?
+    public var videoUrl: URL?
 }
 
 public struct HandleAvailability: Codable, Sendable, Hashable {

@@ -77,7 +77,7 @@ struct FriendProfileView: View {
                 }
             }
             if f.freeNow {
-                Pill(f.freeUntil.map { "Free until \($0.formatted(date: .omitted, time: .shortened))" } ?? "Free now", tint: .mint, systemImage: "circle.fill")
+                Pill(f.freeUntilText().map { "Free until \($0)" } ?? "Free now", tint: .mint, systemImage: "circle.fill")
             }
         }
         .padding(.top, Space.s)

@@ -16,7 +16,7 @@ import { detectReference } from '../src/ai/detector.js';
 import { rerankPhotos } from '../src/ai/rerank.js';
 import { queryPhotos } from '../src/lib/vectors.js';
 import { sendToUser } from '../src/lib/ws.js';
-import { handleTranscript } from '../src/lib/references.js';
+import { handleTranscript, suppressRepeat } from '../src/lib/references.js';
 
 const input = { callId: 'c', segId: 's', text: 'I ate ramen in Chinatown in Houston', isPartial: true };
 beforeEach(() => {
@@ -44,7 +44,7 @@ it('passes spoken subject to reranker and suggests partials without auto-sharing
 });
 
 it('does not substitute the skyline when the ramen photo was already suggested', async () => {
-  vi.mocked(queryPrefix).mockResolvedValue([{ userId: 'u', photoId: 'ramen' }] as any);
+  vi.mocked(queryPrefix).mockResolvedValue([{ userId: 'u', photoId: 'ramen', createdAt: new Date().toISOString() }] as any);
   await handleTranscript('u', input);
   expect(sendToUser).not.toHaveBeenCalled();
 });
@@ -65,7 +65,7 @@ it('skips competing partial searches', async () => {
   expect(del).not.toHaveBeenCalled();
 });
 
-const friendSeg = { sk: 'SEG#9999999999999#f#x', userId: 'f', text: 'I ate ramen in Chinatown in Houston last weekend' };
+const friendSeg = { sk: `SEG#${Date.now() - 2000}#f#x`, userId: 'f', text: 'I ate ramen in Chinatown in Houston last weekend' };
 
 it('does not search the camera roll when the line is the friend\'s voice picked up by the mic', async () => {
   vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
@@ -78,18 +78,18 @@ it('does not search the camera roll when the line is the friend\'s voice picked 
 it('catches echo from the friend\'s latest partial before their final lands', async () => {
   vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
   vi.mocked(get).mockImplementation(async (key: any) =>
-    key.sk === 'LIVE#f' ? { userId: 'f', text: friendSeg.text, at: Date.now() } : { status: 'indexed', s3Key: 'photo' });
+    key.sk === 'LIVE#f' ? { userId: 'f', text: friendSeg.text, at: Date.now() - 2000 } : { status: 'indexed', s3Key: 'photo' });
   await handleTranscript('u', input);
   expect(detectReference).not.toHaveBeenCalled();
 });
 
-it('drops the suggestion when the friend\'s matching line lands during the search', async () => {
+it('keeps the original suggestion when the friend\'s matching line lands during the search', async () => {
   vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
   vi.mocked(get).mockImplementation(async (key: any) => (key.sk === 'LIVE#f' ? undefined : { status: 'indexed', s3Key: 'photo' }));
-  vi.mocked(query).mockResolvedValueOnce([]).mockResolvedValue([friendSeg] as any);
+  vi.mocked(query).mockResolvedValueOnce([]).mockResolvedValue([{ ...friendSeg, sk: `SEG#${Date.now() + 1000}#f#x` }] as any);
   await handleTranscript('u', { ...input, isPartial: false });
   expect(detectReference).toHaveBeenCalled();
-  expect(sendToUser).not.toHaveBeenCalled();
+  expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen' }));
 });
 
 it('still suggests when the friend said something unrelated', async () => {
@@ -98,4 +98,28 @@ it('still suggests when the friend said something unrelated', async () => {
   vi.mocked(query).mockResolvedValue([{ ...friendSeg, text: 'what did you do this weekend' }] as any);
   await handleTranscript('u', { ...input, isPartial: false });
   expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen' }));
+});
+
+it('does not let simultaneous pickup veto both users', async () => {
+  vi.mocked(getCall).mockResolvedValue({ id: 'c', participants: ['u', 'f'] } as any);
+  vi.mocked(get).mockImplementation(async (key: any) =>
+    key.sk === 'LIVE#f' ? { userId: 'f', text: input.text, at: Date.now() } : { status: 'indexed', s3Key: 'photo' });
+  await handleTranscript('u', input);
+  expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen' }));
+});
+
+it('suggests the same correct photo again after the cooldown instead of a runner-up', async () => {
+  vi.mocked(queryPrefix).mockResolvedValue([{ userId: 'u', photoId: 'ramen', sourceSegId: 'earlier', createdAt: new Date(Date.now() - 11000).toISOString() }] as any);
+  await handleTranscript('u', input);
+  expect(sendToUser).toHaveBeenCalledWith('u', expect.objectContaining({ photoId: 'ramen' }));
+});
+
+it('deduplicates revisions of one utterance but permits a later request', () => {
+  const now = Date.now();
+  const old = [{ photoId: 'ramen', sourceSegId: 'first', createdAt: new Date(now - 30000).toISOString() }];
+  expect(suppressRepeat(old, 'ramen', 'first', now)).toBe(true);
+  expect(suppressRepeat(old, 'ramen', 'second', now)).toBe(false);
+  expect(suppressRepeat([{ photoId: 'ramen', createdAt: new Date(now - 9999).toISOString() }], 'ramen', 'second', now)).toBe(true);
+  expect(suppressRepeat([{ photoId: 'ramen', createdAt: new Date(now - 10000).toISOString() }], 'ramen', 'second', now)).toBe(false);
+  expect(suppressRepeat([{ photoId: 'ramen' }], 'ramen', 'second', now)).toBe(false);
 });

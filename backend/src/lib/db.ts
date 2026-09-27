@@ -20,8 +20,8 @@ export const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 export type Key = { pk: string; sk: string };
 export type Item = Record<string, any> & Key;
 
-export async function get<T = Item>(key: Key): Promise<T | undefined> {
-  const r = await ddb.send(new GetCommand({ TableName: env.table, Key: key }));
+export async function get<T = Item>(key: Key, opts: { consistent?: boolean } = {}): Promise<T | undefined> {
+  const r = await ddb.send(new GetCommand({ TableName: env.table, Key: key, ConsistentRead: opts.consistent }));
   return r.Item as T | undefined;
 }
 

@@ -126,20 +126,14 @@ struct CallSummaryView: View {
                         // Screenshot mode has no server, so its fixtures name a bundled scene instead.
                         PhotoContent(image: app.isPreview ? .placeholder(photo.shareId) : .url(photo.url))
                             .frame(width: 96, height: 128)
-                            .overlay(alignment: .bottomLeading) {
-                                if photo.isVideo {
-                                    Image(systemName: "play.fill").font(.caption.weight(.bold)).foregroundStyle(.white)
-                                        .padding(6).background(.black.opacity(0.45), in: Circle()).padding(6)
-                                        .accessibilityHidden(true)
-                                }
-                            }
+                            .overlay(alignment: .bottomLeading) { if photo.isVideo { VideoBadge(durationMs: nil).padding(Space.xs) } }
                             .clipShape(RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
                             .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: Radius.input, style: .continuous))
                             .contextMenu {
                                 Button("Save to Photos", systemImage: "square.and.arrow.down") { export([photo], callId: p.callId, to: .photos) }
                                 Button("Share…", systemImage: "square.and.arrow.up") { export([photo], callId: p.callId, to: .shareSheet) }
                             }
-                            .accessibilityLabel(label(for: photo, in: p))
+                            .accessibilityLabel(recapLabel(photo, p))
                     }
                 }
                 .padding(.horizontal, Space.margin)
@@ -150,9 +144,9 @@ struct CallSummaryView: View {
         .transition(.opacity)
     }
 
-    private func label(for photo: CallPhoto, in p: MemoryStore.PendingSummary) -> String {
-        let noun = photo.isVideo ? "Video" : "Photo"
-        return photo.senderId == p.friendId ? "\(noun) from \(p.friendName)" : "\(noun) you showed"
+    private func recapLabel(_ photo: CallPhoto, _ p: MemoryStore.PendingSummary) -> String {
+        let kind = photo.isVideo ? "Video" : "Photo"
+        return photo.senderId == p.friendId ? "\(kind) from \(p.friendName)" : "\(kind) you showed"
     }
 
     @ViewBuilder private var exportMessage: some View {

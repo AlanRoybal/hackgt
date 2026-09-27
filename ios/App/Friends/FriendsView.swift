@@ -143,8 +143,9 @@ struct FreeNowCard: View {
         VStack(spacing: Space.xs) {
             AvatarView(user: friend.user, name: friend.name, size: AvatarSize.large, ring: true, ringOpacity: pulse)
             Text(friend.name).font(Typography.friendName).foregroundStyle(Palette.ink).lineLimit(1)
-            Text(friend.freeUntil.map { "Until \($0.formatted(date: .omitted, time: .shortened))" } ?? "Free now")
+            Text(friend.freeUntilText().map { "Until \($0)" } ?? "Free now")
                 .font(.footnote.weight(.semibold)).foregroundStyle(Palette.mintStrong)
+                .multilineTextAlignment(.center)
         }
         .frame(width: typeSize.isAccessibilitySize ? 220 : 104)
         .padding(.vertical, Space.m)
@@ -199,6 +200,7 @@ struct AddFriendsView: View {
                         }
                     case .invite:
                         InviteCard()
+                        TapHintCard()
                     }
                 }
                 .padding(.horizontal, Space.margin)

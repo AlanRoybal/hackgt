@@ -15,7 +15,7 @@ public enum CallMediaExport {
     /// A downloaded item, living in its own temporary folder until `discard` is called.
     public struct File: Sendable, Hashable {
         public var url: URL
-        public var kind: CallPhoto.Kind
+        public var kind: MediaType
     }
 
     private static let log = Logger(subsystem: "app.nudge", category: "export")

@@ -1,16 +1,21 @@
 import Foundation
 
-/// A photo the local user asked to show.
+/// A photo or short video the local user asked to show.
 public struct OutgoingPhoto: Hashable, Sendable, Identifiable {
     public var id: String       // photoId
     public var suggestionId: String?
-    public var image: PhotoImage   // local preview (the suggestion thumbnail)
+    public var image: PhotoImage   // local preview (the suggestion thumbnail, or the clip for a video)
+    /// The clip's length, for a video.
+    public var videoMs: Int?
 
-    public init(photoId: String, suggestionId: String?, image: PhotoImage) {
+    public init(photoId: String, suggestionId: String?, image: PhotoImage, videoMs: Int? = nil) {
         self.id = photoId
         self.suggestionId = suggestionId
         self.image = image
+        self.videoMs = videoMs
     }
+
+    public var isVideo: Bool { image.isVideo }
 }
 
 /// Pure state machine for the synced photo swap (SPEC REF-7/8/9, §3.10).
@@ -41,6 +46,7 @@ public struct PhotoShareSession: Sendable {
         public var durationMs: Int
         public var queueIndex: Int
         public var queueLength: Int
+        public var isVideo: Bool = false
         public var image: PhotoImage?
         public var phase: Phase
     }
@@ -66,7 +72,7 @@ public struct PhotoShareSession: Sendable {
     public enum Effect: Hashable, Sendable {
         case createShare(OutgoingPhoto)
         case send(PhotoShareMessage)
-        case fetch(shareId: String, senderId: String)
+        case fetch(shareId: String, senderId: String, isVideo: Bool)
         case markShown(shareId: String, shownAt: Date, durationMs: Int)
         case log(String)
     }
@@ -138,14 +144,17 @@ public struct PhotoShareSession: Sendable {
             guard let item = creating, item.id == photoId else { break }
             creating = nil
             let pendingIncl = 1 + pending.count
-            let duration = PhotoTiming.durationMs(pendingIncludingCurrent: pendingIncl)
+            let duration = item.isVideo
+                ? PhotoTiming.durationMs(videoMs: item.videoMs ?? PhotoTiming.maxVideoMs)
+                : PhotoTiming.durationMs(pendingIncludingCurrent: pendingIncl)
             let seq = nextSeq
             nextSeq += 1
             let o = Outgoing(photo: item, shareId: shareId, seq: seq, durationMs: duration,
                              queueIndex: burstShown, queueLength: burstShown + pendingIncl, phase: .offered(at: now))
             outgoing = o
             effects.append(.send(PhotoShareMessage(type: .offer, seq: seq, shareId: shareId, senderId: selfId,
-                                                   durationMs: duration, queueIndex: o.queueIndex, queueLength: o.queueLength)))
+                                                   durationMs: duration, queueIndex: o.queueIndex, queueLength: o.queueLength,
+                                                   media: item.isVideo ? .video : nil)))
 
         case .shareFailed(let photoId):
             guard creating?.id == photoId else { break }
@@ -232,11 +241,14 @@ public struct PhotoShareSession: Sendable {
 
         switch m.type {
         case .offer:
+            let isVideo = m.media == .video
+            // Never trust a peer's duration beyond the longest clip we'd play ourselves.
+            let cap = PhotoTiming.durationMs(videoMs: PhotoTiming.maxVideoMs)
             incoming = Incoming(shareId: m.shareId, senderId: m.senderId, seq: m.seq,
-                                durationMs: m.durationMs ?? PhotoTiming.durationMs(pendingIncludingCurrent: 1),
+                                durationMs: min(m.durationMs ?? PhotoTiming.durationMs(pendingIncludingCurrent: 1), cap),
                                 queueIndex: m.queueIndex ?? 0, queueLength: m.queueLength ?? 1,
-                                image: nil, phase: .fetching)
-            return [.fetch(shareId: m.shareId, senderId: m.senderId)]
+                                isVideo: isVideo, image: nil, phase: .fetching)
+            return [.fetch(shareId: m.shareId, senderId: m.senderId, isVideo: isVideo)]
         case .ready:
             // The peer is ready to show *our* photo: start both clocks from now.
             if var o = outgoing, o.shareId == m.shareId, case .offered = o.phase {

@@ -1,6 +1,12 @@
 {
   "note": "Each case is a short two-speaker window. 'S' is the speaker whose camera roll we search (their line is always last); 'F' is the friend. label=true means S's last line references something S would plausibly have a recent photo of. kind: pos | neg | hard (hard negatives look like references but aren't).",
   "cases": [
+    { "id": "request01", "kind": "pos", "label": true, "expect": "key.?cap", "lines": [["S", "picture of cursor keycaps"]] },
+    { "id": "request02", "kind": "pos", "label": true, "expect": "key.?cap", "lines": [["S", "Cursor key cap picture."]] },
+    { "id": "request03", "kind": "pos", "label": true, "expect": "ramen", "lines": [["S", "Show my picture of ramen in Houston"]] },
+    { "id": "request04", "kind": "hard", "label": false, "lines": [["S", "I have no picture of cursor keycaps"]] },
+    { "id": "request05", "kind": "hard", "label": false, "lines": [["S", "Can you show me your photo of the cursor keycaps?"]] },
+    { "id": "request06", "kind": "hard", "label": false, "lines": [["S", "Show a picture of something"]] },
     { "id": "p01", "kind": "pos", "label": true, "lines": [["F", "What did you do this weekend?"], ["S", "We hiked up to this crazy mountain lake on Saturday, the water was so blue."]] },
     { "id": "p02", "kind": "pos", "label": true, "lines": [["S", "I finally made that lasagna recipe you sent me last night."]] },
     { "id": "p03", "kind": "pos", "label": true, "lines": [["F", "How's the new puppy?"], ["S", "She's so tiny, she fell asleep on the couch in like two seconds yesterday."]] },

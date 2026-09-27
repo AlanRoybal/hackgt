@@ -7,6 +7,7 @@ import Friends
 import Memory
 import Messages
 import Models
+import Nearby
 import Networking
 import Nudges
 import Observation
@@ -37,6 +38,7 @@ final class AppModel {
     let call: CallController
     let callKit: CallKitProvider
     let voip: VoIPPushHandler
+    let tap: NearbyTapService
 
     var openThreadId: String?
     var pendingAddHandle: String?
@@ -50,6 +52,7 @@ final class AppModel {
     private var apnsToken: String?
     private var eventLoop: Task<Void, Never>?
     private var statusLoop: Task<Void, Never>?
+    private var friendsLoop: Task<Void, Never>?
     private var started = false
     private var backgroundedAt: Date?
     /// When a notification tap or link last chose where the app should land.
@@ -88,6 +91,7 @@ final class AppModel {
         let callKit = CallKitProvider()
         self.callKit = callKit
         voip = VoIPPushHandler(callKit: callKit)
+        tap = NearbyTapService(api: api)
         onboardingComplete = UserDefaults.standard.bool(forKey: "onboardingComplete")
         wire()
     }
@@ -116,6 +120,9 @@ final class AppModel {
         }
         callKit.onMute = { [weak self] muted in self?.call.setMuted(muted) }
         voip.onToken = { [weak self] _ in Task { await self?.registerDevice() } }
+        tap.me = { [weak session] in session?.userId }
+        tap.isFriend = { [weak friends] id in friends?.friend(id: id) != nil }
+        tap.onAdded = { [weak self] _ in Task { await self?.friends.load() } }
     }
 
     // MARK: Lifecycle
@@ -147,6 +154,8 @@ final class AppModel {
         guard !isPreview, session.status == .signedIn else { return }
         await availability.sync(reason: "foreground")
         await nudges.refreshActive()
+        // Free/busy is computed at fetch time, so what's on screen is as old as the last fetch.
+        await friends.load()
     }
 
     // MARK: Returning home
@@ -184,9 +193,11 @@ final class AppModel {
     var visibleThreadId: String? { selectedTab == .messages ? openThreadId : nil }
 
     func signOut() {
+        tap.stop()
         Task { await socket.disconnect() }
         eventLoop?.cancel()
         statusLoop?.cancel()
+        friendsLoop?.cancel()
         started = false
         session.signOut()
     }
@@ -221,6 +232,8 @@ final class AppModel {
             guard let stream = await self?.socket.statusUpdates() else { return }
             for await s in stream { self?.socketStatus = s }
         }
+        friendsLoop?.cancel()
+        friendsLoop = Task { [friends] in await friends.keepFresh() }
     }
 
     func route(_ event: ServerEvent) {

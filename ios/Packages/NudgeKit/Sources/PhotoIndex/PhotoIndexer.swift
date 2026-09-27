@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreLocation
 import Foundation
 import ImageIO
@@ -9,7 +10,7 @@ import UniformTypeIdentifiers
 import UIKit
 import os
 
-/// Uploads the last 30 days of photos for cloud indexing (PHO-1, PHO-5, PHO-6).
+/// Uploads the last 30 days of photos and short videos for cloud indexing (PHO-1, PHO-5, PHO-6, VID-1).
 @MainActor
 @Observable
 public final class PhotoIndexer: NSObject {
@@ -82,7 +83,8 @@ public final class PhotoIndexer: NSObject {
                 let size = PhotoSelector.targetSize(width: d.pixelWidth, height: d.pixelHeight)
                 items.append(PhotoUploadItem(assetHash: PhotoSelector.assetHash(d.localIdentifier), takenAt: d.creationDate ?? now,
                                              place: await placeName(for: assets[d.localIdentifier]), isScreenshot: d.isScreenshot,
-                                             width: Int(size.width), height: Int(size.height)))
+                                             width: Int(size.width), height: Int(size.height),
+                                             mediaType: d.isVideo ? .video : nil, durationMs: d.isVideo ? d.durationMs : nil))
             }
             do {
                 let response = try await api.photoUploads(items)
@@ -92,6 +94,11 @@ public final class PhotoIndexer: NSObject {
                     guard let d = batch.first(where: { PhotoSelector.assetHash($0.localIdentifier) == ticket.assetHash }),
                           let asset = assets[d.localIdentifier],
                           let file = await Self.exportJPEG(asset: asset, hash: ticket.assetHash) else { continue }
+                    // A video sends its poster frame (screened and embedded) and the clip (captioned, played in calls).
+                    if d.isVideo {
+                        guard let videoUrl = ticket.videoUploadUrl, let clip = await Self.exportMP4(asset: asset, hash: ticket.assetHash) else { continue }
+                        uploader.upload(file: clip, to: videoUrl, contentType: "video/mp4")
+                    }
                     uploader.upload(file: file, to: ticket.uploadUrl)
                     uploadedThisRun += 1
                 }
@@ -116,7 +123,9 @@ public final class PhotoIndexer: NSObject {
 
     private func fetchRecent(now: Date) -> ([AssetDescriptor], [String: PHAsset]) {
         let options = PHFetchOptions()
-        options.predicate = NSPredicate(format: "creationDate >= %@ AND mediaType == %d", now.addingTimeInterval(-PhotoSelector.window) as NSDate, PHAssetMediaType.image.rawValue)
+        options.predicate = NSPredicate(format: "creationDate >= %@ AND (mediaType == %d OR (mediaType == %d AND duration <= %f))",
+                                        now.addingTimeInterval(-PhotoSelector.window) as NSDate, PHAssetMediaType.image.rawValue,
+                                        PHAssetMediaType.video.rawValue, PhotoSelector.maxVideoDuration)
         options.includeHiddenAssets = false
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let result = PHAsset.fetchAssets(with: options)
@@ -126,7 +135,8 @@ public final class PhotoIndexer: NSObject {
             map[asset.localIdentifier] = asset
             descriptors.append(AssetDescriptor(localIdentifier: asset.localIdentifier, creationDate: asset.creationDate,
                                                isHidden: asset.isHidden, isScreenshot: asset.mediaSubtypes.contains(.photoScreenshot),
-                                               isImage: asset.mediaType == .image, pixelWidth: asset.pixelWidth, pixelHeight: asset.pixelHeight))
+                                               isImage: asset.mediaType == .image, pixelWidth: asset.pixelWidth, pixelHeight: asset.pixelHeight,
+                                               isVideo: asset.mediaType == .video, duration: asset.duration))
         }
         return (descriptors, map)
     }
@@ -163,6 +173,29 @@ public final class PhotoIndexer: NSObject {
         do { try data.write(to: url); return url } catch { return nil }
     }
 
+    /// A 540p MP4 of a video asset: small enough to caption inline and to download mid-call.
+    static func exportMP4(asset: PHAsset, hash: String) async -> URL? {
+        let options = PHVideoRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = .mediumQualityFormat
+        let box: ExportBox = await withCheckedContinuation { c in
+            PHImageManager.default().requestExportSession(forVideo: asset, options: options, exportPreset: AVAssetExportPreset960x540) { session, _ in
+                c.resume(returning: ExportBox(session: session))
+            }
+        }
+        guard let session = box.session else { return nil }
+        session.shouldOptimizeForNetworkUse = true
+        let url = FileManager.default.temporaryDirectory.appending(path: "clip-\(hash).mp4")
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try await session.export(to: url, as: .mp4)
+            return url
+        } catch {
+            Logger(subsystem: "app.nudge", category: "photos").error("video export failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     public func preview(status: PhotoStatus, running: Bool = false) {
         self.status = status
         self.isRunning = running
@@ -195,10 +228,11 @@ public final class BackgroundUploader: NSObject, URLSessionTaskDelegate, @unchec
     private let lock = NSLock()
     private var completionHandler: (() -> Void)?
 
-    public func upload(file: URL, to url: URL) {
+    /// `contentType` must match what the URL was presigned for.
+    public func upload(file: URL, to url: URL, contentType: String = "image/jpeg") {
         var req = URLRequest(url: url)
         req.httpMethod = "PUT"
-        req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
         session.uploadTask(with: req, fromFile: file).resume()
     }
 
@@ -216,6 +250,11 @@ public final class BackgroundUploader: NSObject, URLSessionTaskDelegate, @unchec
         }
         DispatchQueue.main.async { handler?() }
     }
+}
+
+/// Carries the export session out of the Photos callback.
+private struct ExportBox: @unchecked Sendable {
+    let session: AVAssetExportSession?
 }
 
 extension Sequence where Element: Hashable {

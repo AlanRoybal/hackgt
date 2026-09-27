@@ -55,10 +55,14 @@ export function mutualFreeWindow(
   return { start: now, end: Math.min(...candidates) };
 }
 
-/** Free-now status for a single person, used by the Friends list. */
-export function freeStatus(now: number, blocks: BusyBlock[]): { freeNow: boolean; freeUntil?: string } {
+/**
+ * Free-now status for a single person, used by the Friends list. `busyUntil` is when the current busy stretch ends,
+ * so the client knows when to look again for a new opening.
+ */
+export function freeStatus(now: number, blocks: BusyBlock[]): { freeNow: boolean; freeUntil?: string; busyUntil?: string } {
   const iv = mergeIntervals(blocks.map(toInterval));
-  if (isBusyAt(iv, now)) return { freeNow: false };
+  const busy = iv.find((b) => b.start <= now && now < b.end);
+  if (busy) return { freeNow: false, busyUntil: new Date(busy.end).toISOString() };
   const next = nextBusyStart(iv, now);
   return { freeNow: true, freeUntil: next !== undefined ? new Date(next).toISOString() : undefined };
 }

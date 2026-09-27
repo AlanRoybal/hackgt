@@ -3,6 +3,8 @@ import Foundation
 /// Chime data message on topic `photo` (SPEC §3.10). Must stay under 2 KB.
 public struct PhotoShareMessage: Codable, Hashable, Sendable {
     public enum Kind: String, Codable, Sendable { case offer, ready, end, cancel }
+    /// Absent means photo, so older apps' offers still decode (and older apps ignore the key).
+    public enum Media: String, Codable, Sendable { case photo, video }
 
     public static let topic = "photo"
     public static let lifetimeMs: Int32 = 10_000
@@ -16,8 +18,10 @@ public struct PhotoShareMessage: Codable, Hashable, Sendable {
     public var durationMs: Int?
     public var queueIndex: Int?
     public var queueLength: Int?
+    public var media: Media?
 
-    public init(type: Kind, seq: Int, shareId: String, senderId: String, durationMs: Int? = nil, queueIndex: Int? = nil, queueLength: Int? = nil) {
+    public init(type: Kind, seq: Int, shareId: String, senderId: String, durationMs: Int? = nil, queueIndex: Int? = nil, queueLength: Int? = nil,
+                media: Media? = nil) {
         self.type = type
         self.seq = seq
         self.shareId = shareId
@@ -25,6 +29,7 @@ public struct PhotoShareMessage: Codable, Hashable, Sendable {
         self.durationMs = durationMs
         self.queueIndex = queueIndex
         self.queueLength = queueLength
+        self.media = media
     }
 
     public enum CodecError: Error { case tooLarge(Int), unsupportedVersion(Int) }

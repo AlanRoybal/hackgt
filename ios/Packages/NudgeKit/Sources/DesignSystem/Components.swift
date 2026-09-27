@@ -106,11 +106,7 @@ public struct FriendRow: View {
         self.friend = friend
         self.pulse = pulse
         if friend.freeNow {
-            if let until = friend.freeUntil {
-                status = "Free until \(until.formatted(date: .omitted, time: .shortened))"
-            } else {
-                status = "Free now"
-            }
+            status = friend.freeUntilText(now: now).map { "Free until \($0)" } ?? "Free now"
             statusTint = Palette.mintStrong
         } else if let last = friend.lastCallAt {
             status = "Last talked \(last.formatted(.relative(presentation: .named)))"
