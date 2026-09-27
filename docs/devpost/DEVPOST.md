@@ -1,4 +1,4 @@
-📖 **DeepWiki (full code walkthrough):** DEEPWIKI_URL_PLACEHOLDER
+📖 **DeepWiki (full code walkthrough):** https://deepwiki.com/AlanRoybal/hackgt
 🐙 **Code:** https://github.com/AlanRoybal/hackgt
 
 ---
