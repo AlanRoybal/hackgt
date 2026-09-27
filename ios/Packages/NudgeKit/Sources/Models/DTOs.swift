@@ -698,7 +698,7 @@ public struct ShareCreated: Codable, Sendable, Hashable {
     public var videoUrl: URL?
 }
 
-/// A photo either person showed during a call, for the post-call recap. `url` expires after 5 minutes.
+/// A photo or video either person showed during a call, for the post-call recap. URLs expire after 5 minutes.
 public struct CallPhoto: Codable, Sendable, Hashable, Identifiable {
     public var shareId: String
     public var senderId: String
@@ -709,7 +709,9 @@ public struct CallPhoto: Codable, Sendable, Hashable, Identifiable {
     public var videoUrl: URL?
 
     public var id: String { shareId }
-    public var isVideo: Bool { mediaType == .video }
+    public var isVideo: Bool { mediaType == .video && videoUrl != nil }
+    /// What to save or share: the clip for a video, the image otherwise.
+    public var exportURL: URL { isVideo ? videoUrl ?? url : url }
 
     public init(shareId: String, senderId: String, url: URL, createdAt: Date, mediaType: MediaType? = nil, videoUrl: URL? = nil) {
         self.shareId = shareId

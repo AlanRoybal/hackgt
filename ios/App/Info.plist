@@ -61,6 +61,8 @@
 	<string>Nudge won't nudge you while you're driving.</string>
 	<key>NSNearbyInteractionUsageDescription</key>
 	<string>Nudge measures how close a friend's phone is so holding your phones together adds each other.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Nudge saves the photos and videos from your calls when you choose to.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Nudge analyzes photos from the last 30 days so the ones you mention on a call can appear. Only photos you choose to show are sent to your friend.</string>
 	<key>NudgeAPIBaseURL</key>
