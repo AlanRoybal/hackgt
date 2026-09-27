@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { LEVELS, pairAllows, stepDown, stricter, userAllows } from '../src/engine/frequency.js';
+import { becameBusyAt } from '../src/engine/overlap.js';
 import { isTerminal, transition, type MachineNudge, type NudgeEvent } from '../src/engine/state.js';
 import type { Frequency } from '../src/engine/types.js';
 
@@ -35,6 +36,28 @@ describe('frequency', () => {
     expect(pairAllows('normal', 'normal', ago(30 * H), ago(2 * H), now)).toBe(false);
     expect(pairAllows('normal', 'normal', undefined, undefined, now)).toBe(true);
     expect(pairAllows('off', 'high', undefined, undefined, now)).toBe(false);
+  });
+
+  it('becoming busy after the last nudge or call resets the limits', () => {
+    const busy = now - 30 * 60_000; // an event started 30 min ago and has since ended
+    expect(pairAllows('normal', 'normal', ago(2 * H), ago(1 * H), now, busy)).toBe(true);
+    expect(userAllows('normal', [ago(10 * H), ago(8 * H), ago(1 * H)], ago(1 * H), now, busy)).toBe(true);
+    // Contact after the user became busy (the free period since then) still counts.
+    expect(pairAllows('normal', 'normal', ago(10 * 60_000), undefined, now, busy)).toBe(false);
+    expect(userAllows('normal', [], ago(10 * 60_000), now, busy)).toBe(false);
+    expect(pairAllows('off', 'normal', undefined, undefined, now, busy)).toBe(false);
+  });
+
+  it('becameBusyAt remembers the latest block that has started', () => {
+    const blocks = [
+      { start: ago(3 * H), end: ago(2 * H) },
+      { start: ago(1 * H), end: ago(30 * 60_000) },
+      { start: new Date(now + H).toISOString(), end: new Date(now + 2 * H).toISOString() },
+    ];
+    expect(becameBusyAt({ busyBlocks: blocks }, now)).toBe(now - H);
+    expect(becameBusyAt({ busyBlocks: [], lastBusyStart: ago(H) }, now)).toBe(now - H);
+    expect(becameBusyAt({ busyBlocks: blocks.slice(2) }, now)).toBeUndefined();
+    expect(becameBusyAt(undefined, now)).toBeUndefined();
   });
 
   it('property: never more than dailyCap nudges in any 24 h window when the limiter is obeyed', () => {

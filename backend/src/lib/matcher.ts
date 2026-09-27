@@ -2,7 +2,7 @@ import { adaptiveDecision } from '../engine/adaptive.js';
 // Nudge matcher: finds mutual free windows, applies suppression + frequency, and sends nudges (SPEC NUD-1..7).
 import { nudgeCopy } from '../engine/copy.js';
 import { pairAllows, within24h } from '../engine/frequency.js';
-import { mutualFreeWindow } from '../engine/overlap.js';
+import { becameBusyAt, mutualFreeWindow } from '../engine/overlap.js';
 import { choosePairs, type CandidatePair } from '../engine/pairChoice.js';
 import { minutesUntilQuiet } from '../engine/quiet.js';
 import { isStale, suppressionReasons } from '../engine/suppression.js';
@@ -41,6 +41,12 @@ export function windowMinutes(now: number, ua: UserItem, ub: UserItem, blocksA: 
   return { minutes, end: now + minutes * 60_000 };
 }
 
+/** Either person becoming busy (e.g. a calendar event) resets both people's limits for the free period after it. */
+function pairResetAt(aa: Parameters<typeof becameBusyAt>[0], ab: Parameters<typeof becameBusyAt>[0], now: number) {
+  const busyAt = Math.max(becameBusyAt(aa, now) ?? -Infinity, becameBusyAt(ab, now) ?? -Infinity);
+  return Number.isFinite(busyAt) ? busyAt : undefined;
+}
+
 export async function runMatcher(opts: MatcherOptions = {}): Promise<MatcherResult> {
   const now = opts.now ?? Date.now();
   const only = opts.onlyUserIds ? new Set(opts.onlyUserIds) : undefined;
@@ -67,8 +73,9 @@ export async function runMatcher(opts: MatcherOptions = {}): Promise<MatcherResu
     if (!ua || !ub) continue;
     const aa = avail.get(f.a);
     const ab = avail.get(f.b);
-    const reasons = [...suppressionReasons(ua, aa, now).map((r) => `a:${r}`), ...suppressionReasons(ub, ab, now).map((r) => `b:${r}`)];
-    if (!pairAllows(ua.settings.frequency, ub.settings.frequency, f.lastNudgeAt, f.lastCallAt, now)) reasons.push('pair_cooldown');
+    const resetAt = pairResetAt(aa, ab, now);
+    const reasons = [...suppressionReasons(ua, aa, now, { resetAt }).map((r) => `a:${r}`), ...suppressionReasons(ub, ab, now, { resetAt }).map((r) => `b:${r}`)];
+    if (!pairAllows(ua.settings.frequency, ub.settings.frequency, f.lastNudgeAt, f.lastCallAt, now, resetAt)) reasons.push('pair_cooldown');
     const w = reasons.length ? null : windowMinutes(now, ua, ub, aa?.busyBlocks ?? [], ab?.busyBlocks ?? []);
     if (!reasons.length) {
       if (!w) reasons.push('busy_now');
@@ -145,9 +152,10 @@ export async function precheck(nudgeId: string, nowArg?: number) {
   const [a, b] = n.participants;
   const ua = users.get(a)!;
   const ub = users.get(b)!;
+  const resetAt = pairResetAt(avail.get(a), avail.get(b), now);
   const reasons = [
-    ...suppressionReasons(ua, avail.get(a), now, { ignoreBusy: true, ignoreFrequency: true }),
-    ...suppressionReasons(ub, avail.get(b), now, { ignoreBusy: true, ignoreFrequency: true }),
+    ...suppressionReasons(ua, avail.get(a), now, { ignoreBusy: true, ignoreFrequency: true, resetAt }),
+    ...suppressionReasons(ub, avail.get(b), now, { ignoreBusy: true, ignoreFrequency: true, resetAt }),
   ];
   const w = windowMinutes(now, ua, ub, avail.get(a)?.busyBlocks ?? [], avail.get(b)?.busyBlocks ?? []);
   if (reasons.length || !w || w.minutes < Math.max(ua.settings.minWindowMin, ub.settings.minWindowMin)) {

@@ -29,6 +29,20 @@ export function mergeBusyBlocks(blocks: BusyBlock[]): BusyBlock[] {
 /** Is `now` inside any busy block? */
 export const isBusyAt = (blocks: Interval[], now: number) => blocks.some((b) => b.start <= now && now < b.end);
 
+/**
+ * When the user last became busy: the latest start among recorded and stored blocks that have begun by `now`.
+ * Frequency limits reset from this point so each free period after a calendar event can be nudged.
+ */
+export function becameBusyAt(avail: { busyBlocks?: BusyBlock[]; lastBusyStart?: string } | undefined, now: number): number | undefined {
+  let latest = avail?.lastBusyStart ? Date.parse(avail.lastBusyStart) : undefined;
+  if (latest !== undefined && !(latest <= now)) latest = undefined;
+  for (const b of avail?.busyBlocks ?? []) {
+    const start = Date.parse(b.start);
+    if (start <= now && (latest === undefined || start > latest)) latest = start;
+  }
+  return latest;
+}
+
 /** Start of the next busy block after `now`, or undefined. Assumes `now` is free. */
 export function nextBusyStart(blocks: Interval[], now: number): number | undefined {
   let next: number | undefined;

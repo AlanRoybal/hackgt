@@ -27,19 +27,26 @@ export const stricter = (a: Frequency, b: Frequency): Frequency =>
 export const within24h = (ats: string[] | undefined, now: number) =>
   (ats ?? []).filter((t) => now - Date.parse(t) < 24 * H && Date.parse(t) <= now);
 
+/** Nudges and calls before `resetAt` (when the user last became busy) no longer count against the limits. */
+const since = (at: string | undefined, resetAt: number | undefined) =>
+  at !== undefined && (resetAt === undefined || Date.parse(at) >= resetAt) ? at : undefined;
+
 /** Whether a user may receive another nudge now under their level. */
-export function userAllows(level: Frequency, recentNudgeAts: string[] | undefined, lastNudgeAt: string | undefined, now: number): boolean {
+export function userAllows(level: Frequency, recentNudgeAts: string[] | undefined, lastNudgeAt: string | undefined, now: number, resetAt?: number): boolean {
   const L = LEVELS[level];
   if (L.dailyCap === 0) return false;
-  if (within24h(recentNudgeAts, now).length >= L.dailyCap) return false;
-  if (lastNudgeAt && now - Date.parse(lastNudgeAt) < L.minGapMs) return false;
+  if (within24h(recentNudgeAts, now).filter((t) => since(t, resetAt)).length >= L.dailyCap) return false;
+  const last = since(lastNudgeAt, resetAt);
+  if (last && now - Date.parse(last) < L.minGapMs) return false;
   return true;
 }
 
 /** Pair cooldown, measured from the later of the last nudge and last call, using the stricter level. */
-export function pairAllows(a: Frequency, b: Frequency, lastNudgeAt: string | undefined, lastCallAt: string | undefined, now: number): boolean {
+export function pairAllows(a: Frequency, b: Frequency, lastNudgeAt: string | undefined, lastCallAt: string | undefined, now: number, resetAt?: number): boolean {
   const L = LEVELS[stricter(a, b)];
   if (L.dailyCap === 0) return false;
-  const last = Math.max(lastNudgeAt ? Date.parse(lastNudgeAt) : -Infinity, lastCallAt ? Date.parse(lastCallAt) : -Infinity);
+  const nudge = since(lastNudgeAt, resetAt);
+  const call = since(lastCallAt, resetAt);
+  const last = Math.max(nudge ? Date.parse(nudge) : -Infinity, call ? Date.parse(call) : -Infinity);
   return !(now - last < L.pairCooldownMs);
 }

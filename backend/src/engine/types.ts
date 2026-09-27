@@ -38,6 +38,8 @@ export interface Availability {
   whoop?: import('./whoop.js').WhoopSignal;
   busyBlocks: BusyBlock[];
   syncedAt?: string;
+  /** Start of the most recent busy block that has begun; kept because clients drop blocks once they end. */
+  lastBusyStart?: string;
   focus?: { isFocused: boolean; at: string };
   driving?: { isDriving: boolean; at: string };
 }

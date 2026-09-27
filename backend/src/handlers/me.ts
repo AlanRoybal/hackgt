@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { checkHandle } from '../engine/handles.js';
 import { stepDown } from '../engine/frequency.js';
-import { mergeBusyBlocks } from '../engine/overlap.js';
+import { becameBusyAt, mergeBusyBlocks } from '../engine/overlap.js';
 import { del, get, isConditionalFailure, put, update } from '../lib/db.js';
 import { confirmPhone, getPhone, startPhoneVerification } from '../lib/cognito.js';
 import { deleteAccount } from '../lib/deleteAccount.js';
@@ -129,7 +129,11 @@ export const handler = router({
       .map((b: any) => ({ start: b.start, end: b.end }));
     const syncedAt = typeof body.syncedAt === 'string' && !Number.isNaN(Date.parse(body.syncedAt)) ? body.syncedAt : new Date().toISOString();
     const existing = await get(K.avail(userId));
-    await put({ ...(existing ?? {}), ...K.avail(userId), busyBlocks: mergeBusyBlocks(blocks), syncedAt, source: body.source ?? 'apple' });
+    // Clients only send blocks from now on, so remember when a block that has begun started before it drops out.
+    const merged = mergeBusyBlocks(blocks);
+    const busyStart = becameBusyAt({ busyBlocks: [...(existing?.busyBlocks ?? []), ...merged], lastBusyStart: existing?.lastBusyStart }, Date.now());
+    const lastBusyStart = busyStart === undefined ? undefined : new Date(busyStart).toISOString();
+    await put({ ...(existing ?? {}), ...K.avail(userId), busyBlocks: merged, syncedAt, source: body.source ?? 'apple', lastBusyStart });
     if (isValidTimeZone(body.tz)) await update(K.user(userId), { tz: body.tz });
   },
 

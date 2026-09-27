@@ -73,4 +73,12 @@ describe('suppressionReasons', () => {
   it('frequency', () => {
     expect(suppressionReasons(user({ settings: { ...DEFAULT_SETTINGS, frequency: 'off' } }), fresh, now)).toContain('frequency');
   });
+  it('becoming busy resets the frequency gap and adaptive backoff', () => {
+    const ago = (m: number) => new Date(now - m * 60_000).toISOString();
+    const skips = Array.from({ length: 4 }, (_, i) => ({ id: `n${i}`, offeredAt: ago(90 - i), at: ago(89 - i), outcome: 'skip' as const }));
+    const u = user({ lastNudgeAt: ago(86), recentNudgeAts: [ago(86)], adaptive: { samples: skips } });
+    expect(suppressionReasons(u, fresh, now)).toEqual(expect.arrayContaining(['frequency', 'adaptive_backoff']));
+    const afterEvent = { ...fresh, lastBusyStart: ago(60) };
+    expect(suppressionReasons(u, afterEvent, now)).toEqual([]);
+  });
 });
