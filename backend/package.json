@@ -9,6 +9,7 @@
     "integ": "vitest run --dir integ --no-file-parallelism",
     "synth": "cdk synth -c stage=dev",
     "deploy:dev": "cdk deploy -c stage=dev --require-approval never --outputs-file cdk-outputs.dev.json",
+    "demo:adaptive": "tsx scripts/demo-adaptive.ts",
     "backfill:captions": "tsx scripts/backfill-caption-vectors.ts",
     "destroy:dev": "cdk destroy -c stage=dev --force"
   },

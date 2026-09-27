@@ -18,7 +18,7 @@ export const handler = router({
   'GET /nudges/{id}': async ({ userId, params }) => nudgeDTO(await participantNudge(params.id, userId), userId),
 
   'POST /nudges/{id}/respond': async ({ userId, params, body }) => {
-    if (!['accept', 'skip', 'less'].includes(body.action)) throw bad('invalid_action');
+    if (!['accept', 'skip', 'less', 'pause'].includes(body.action)) throw bad('invalid_action');
     await participantNudge(params.id, userId);
     const n = await applyEvent(params.id, { type: 'respond', userId, action: body.action });
     return nudgeDTO(n, userId);

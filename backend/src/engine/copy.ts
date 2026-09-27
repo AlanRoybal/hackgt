@@ -8,11 +8,11 @@ export function durationPhrase(minutes: number, withNext: boolean): string {
 }
 
 export function nudgeCopy(name: string, minutes: number, topicTitle?: string): { title: string; body: string } {
-  const title = `${name} is free too`;
+  const title = `A moment to catch up with ${name}?`;
   if (topicTitle) {
-    return { title, body: `You and ${name} are both free for ${durationPhrase(minutes, false)}. Want to follow up on ${topicTitle}?` };
+    return { title, body: `Your calendars look open for ${durationPhrase(minutes, false)}. Want to follow up on ${topicTitle}?` };
   }
-  return { title, body: `You and ${name} are both free for ${durationPhrase(minutes, true)}. Call?` };
+  return { title, body: `Your calendars look open for ${durationPhrase(minutes, true)}. Call?` };
 }
 
 /** Copy for a direct "Call now" request. */

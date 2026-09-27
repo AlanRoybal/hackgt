@@ -57,7 +57,7 @@ targets:
         BGTaskSchedulerPermittedIdentifiers: [app.nudge.refresh, app.nudge.photos]
         CFBundleURLTypes:
           - CFBundleURLName: app.nudge.add
-            CFBundleURLSchemes: [nudge]
+            CFBundleURLSchemes: [nudge, app.nudge.whoop]
         NSCalendarsFullAccessUsageDescription: "Nudge checks when you're busy so it can tell when you and a friend are both free. Only busy times are shared, never event names."
         NSPhotoLibraryUsageDescription: "Nudge analyzes photos from the last 30 days so the ones you mention on a call can appear. Only photos you choose to show are sent to your friend."
         NSPhotoLibraryAddUsageDescription: "Nudge saves the photos and videos from your calls when you choose to."

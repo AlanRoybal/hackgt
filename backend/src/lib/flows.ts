@@ -1,3 +1,4 @@
+import { commitNudgeTransition, isTransitionConflict } from './adaptive.js';
 // Nudge + call orchestration: state transitions, their side effects, and DTOs.
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { followUpMessage } from '../ai/followup.js';
@@ -76,7 +77,7 @@ const CALL_BUSY_MS = 3 * 3_600_000;
 export const otherOf = (parts: [string, string], id: string) => (parts[0] === id ? parts[1] : parts[0]);
 
 export async function getNudge(id: string): Promise<NudgeItem> {
-  const n = await get<NudgeItem>(K.nudge(id));
+  const n = await get<NudgeItem>(K.nudge(id), { consistent: true });
   if (!n) throw notFound('nudge_not_found');
   return n;
 }
@@ -160,13 +161,9 @@ export async function applyEvent(nudgeId: string, event: NudgeEvent): Promise<Nu
     if (!t.ok) throw new HttpError(409, t.error ?? 'invalid_state');
     let updated: NudgeItem;
     try {
-      updated = (await update(
-        K.nudge(nudgeId),
-        { state: t.next.state, responses: t.next.responses, version: n.version + 1 },
-        { condition: '#v = :v', names: { '#v': 'version' }, values: { ':v': n.version } },
-      )) as NudgeItem;
+      updated = await commitNudgeTransition(n, t.next, event);
     } catch (e) {
-      if (isConditionalFailure(e)) continue;
+      if (isConditionalFailure(e) || isTransitionConflict(e)) continue;
       throw e;
     }
     for (const eff of t.effects) {

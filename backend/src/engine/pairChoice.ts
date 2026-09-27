@@ -5,6 +5,7 @@ export interface CandidatePair {
   a: string;
   b: string;
   hasDueTopic: boolean;
+  timingPreference?: number;
   lastCallAt?: string;
 }
 
@@ -12,6 +13,8 @@ export function rankPairs(pairs: CandidatePair[]): CandidatePair[] {
   const lastCall = (p: CandidatePair) => (p.lastCallAt ? Date.parse(p.lastCallAt) : -Infinity);
   return [...pairs].sort((x, y) => {
     if (x.hasDueTopic !== y.hasDueTopic) return x.hasDueTopic ? -1 : 1;
+    const preference = (y.timingPreference ?? 0) - (x.timingPreference ?? 0);
+    if (preference !== 0) return preference;
     const lx = lastCall(x);
     const ly = lastCall(y);
     if (lx !== ly) return lx < ly ? -1 : 1;

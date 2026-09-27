@@ -325,7 +325,7 @@ public enum NudgeResponse: String, Codable, Sendable {
 }
 
 public enum NudgeAction: String, Codable, Sendable {
-    case accept, skip, less
+    case accept, skip, less, pause
 }
 
 public struct TimeWindow: Codable, Sendable, Hashable {

@@ -36,12 +36,17 @@ struct NudgeBanner: View {
                     Task { await app.nudges.accept(nudge) }
                 }
             }
+            if nudge.kind == .auto {
+                Button("Not now · pause for an hour") { Task { await app.nudges.pause(nudge) } }
+                    .font(.footnote).foregroundStyle(Palette.inkSecondary)
+            }
         }
         .padding(Space.m)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.divider, lineWidth: 1))
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .contextMenu {
+            Button("Pause nudges for an hour", systemImage: "pause.circle") { Task { await app.nudges.pause(nudge) } }
             Button("See this less often", systemImage: "minus.circle") { Task { await app.nudges.seeLess(nudge) } }
             Button("Skip", systemImage: "clock.arrow.circlepath") { Task { await app.nudges.skip(nudge) } }
         }
@@ -68,7 +73,7 @@ struct NudgeBanner: View {
 
     var windowLine: String {
         let end = nudge.window.end.formatted(date: .omitted, time: .shortened)
-        return nudge.minutes >= 60 ? "Free for the next hour" : "Free for \(nudge.minutes) min · until \(end)"
+        return nudge.minutes >= 60 ? "Calendars open for the next hour" : "Calendars open · \(nudge.minutes) min until \(end)"
     }
 
     func rubberband(_ x: CGFloat) -> CGFloat { (x * 200 * 0.55) / (200 + 0.55 * abs(x)) }

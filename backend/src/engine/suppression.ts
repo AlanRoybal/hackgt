@@ -1,3 +1,4 @@
+import { adaptiveDecision } from './adaptive.js';
 // Per-user reasons a nudge must not be sent right now (SPEC NUD-2).
 import { isInQuietHours } from './quiet.js';
 import { userAllows } from './frequency.js';
@@ -6,7 +7,7 @@ import type { Availability, EngineUser } from './types.js';
 export const STALE_MS = 48 * 3_600_000;
 export const CONTEXT_FRESH_MS = 15 * 60_000;
 
-export type SuppressionReason = 'quiet' | 'focus' | 'driving' | 'busy_nudge' | 'stale' | 'no_availability' | 'frequency';
+export type SuppressionReason = 'quiet' | 'focus' | 'driving' | 'busy_nudge' | 'stale' | 'no_availability' | 'frequency' | 'whoop_sleep' | 'whoop_workout' | 'paused' | 'adaptive_backoff' | 'adaptive_timing';
 
 export interface SuppressionOptions {
   /** Skip the frequency check (used when re-evaluating a nudge that was already counted). */
@@ -28,6 +29,16 @@ export function suppressionReasons(
 ): SuppressionReason[] {
   const r: SuppressionReason[] = [];
   const s = user.settings;
+  if (user.nudgePausedUntil && Date.parse(user.nudgePausedUntil) > now) r.push('paused');
+  const adaptive = adaptiveDecision(user.adaptive, user.tz, now);
+  if (adaptive.cooldownUntil > now) r.push('adaptive_backoff');
+  if (adaptive.timingDeferred) r.push('adaptive_timing');
+  const whoop = avail?.whoop;
+  const age = whoop ? now - Date.parse(whoop.syncedAt) : Infinity;
+  if (whoop && age >= 0 && age < CONTEXT_FRESH_MS) {
+    if (whoop.sleepStart && whoop.sleepEnd && isInQuietHours(now, user.tz, whoop.sleepStart, whoop.sleepEnd)) r.push('whoop_sleep');
+    if (whoop.workoutUntil && Date.parse(whoop.workoutUntil) > now) r.push('whoop_workout');
+  }
   if (isInQuietHours(now, user.tz, s.quietStart, s.quietEnd)) r.push('quiet');
   if (!avail?.syncedAt) r.push('no_availability');
   else if (isStale(avail, now)) r.push('stale');

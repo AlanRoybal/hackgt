@@ -32,6 +32,8 @@ struct SettingsView: View {
                         RowDivider(inset: RowMetrics.iconDividerInset)
                         SettingsLink(icon: "calendar", tint: .sky, title: "Calendars", value: "Apple") { CalendarSettingsView() }
                         RowDivider(inset: RowMetrics.iconDividerInset)
+                        SettingsLink(icon: "heart.fill", tint: .rose, title: "WHOOP", value: "Optional") { WhoopSettingsView() }
+                        RowDivider(inset: RowMetrics.iconDividerInset)
                         SettingsLink(icon: "photo.on.rectangle", tint: .butter, title: "Photos", value: app.settings.settings.photoMode.title) { PhotoSettingsView() }
                         RowDivider(inset: RowMetrics.iconDividerInset)
                         SettingsLink(icon: "sparkles", tint: .mint, title: "Memory", value: app.settings.settings.memoryEnabled ? "On" : "Off") { MemorySettingsView() }
@@ -133,7 +135,7 @@ struct NudgeSettingsView: View {
                     ForEach(Frequency.allCases, id: \.self) { Text($0.title) }
                 }
                 .pickerStyle(.segmented)
-                Text(store.settings.frequency.explanation).font(.footnote).foregroundStyle(Palette.inkSecondary)
+                Text(store.settings.frequency.explanation + " Nudge temporarily backs off when you skip or miss invitations, then gradually tries again. Your frequency setting stays the same.").font(.footnote).foregroundStyle(Palette.inkSecondary)
                     .animation(nil, value: store.settings.frequency)
             }
 

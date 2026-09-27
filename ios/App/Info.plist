@@ -31,6 +31,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>nudge</string>
+				<string>app.nudge.whoop</string>
 			</array>
 		</dict>
 	</array>

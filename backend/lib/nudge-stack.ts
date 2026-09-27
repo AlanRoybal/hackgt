@@ -249,6 +249,13 @@ export class NudgeStack extends Stack {
 
     const authFn = fn('auth', 'auth.ts');
     const meFn = fn('me', 'me.ts');
+    const whoopFn = fn('whoop', 'whoop.ts');
+    const whoopSyncFn = fn('whoopSync', 'whoop.ts', 'sync', { timeout: 300 });
+    new scheduler.Schedule(this, 'WhoopSchedule', {
+      schedule: scheduler.ScheduleExpression.rate(Duration.minutes(5)),
+      target: new targets.LambdaInvoke(whoopSyncFn, {}),
+      description: 'Refresh optional WHOOP availability estimates',
+    });
     const friendsFn = fn('friends', 'friends.ts');
     const messagesFn = fn('messages', 'messages.ts');
     const nudgesFn = fn('nudges', 'nudges.ts');
@@ -296,6 +303,8 @@ export class NudgeStack extends Stack {
     };
 
     route('POST', '/auth/apple', authFn, true);
+    for (const [m, p] of [['GET', '/me/whoop'], ['POST', '/me/whoop/connect'], ['POST', '/me/whoop/callback'],
+      ['PATCH', '/me/whoop'], ['DELETE', '/me/whoop']]) route(m, p, whoopFn);
     route('POST', '/auth/refresh', authFn, true);
     if (isDev) route('POST', '/auth/dev', authFn, true);
 
