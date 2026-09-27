@@ -53,15 +53,6 @@ Beyond that, Nudge is different in four concrete ways:
 - **Ask first, always.** Nothing leaves your phone by voice alone. The suggestion appears in *your* window; the friend sees nothing until you tap Show. Photo indexing is 30-day, resized, private-bucket, and deletable; free/busy is the *only* calendar data that leaves the device.
 - **Tap phones to become friends.** Adding a friend is physical: hold two iPhones near each other (UWB / Nearby Interaction, with accelerometer knock detection as fallback) and they link over MultipeerConnectivity — no handles to type when you're already in the same room.
 
-## Screens
-
-![Nudge → call](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/01-nudge-to-call.jpg)
-![Photos in the call](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/02-photos-in-call.jpg)
-![Memory and follow-up](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/03-memory-followup.jpg)
-![Friends and privacy](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/04-friends-privacy.jpg)
-
-*All screens are captured from the real SwiftUI app running in the iOS Simulator via its built-in screenshot mode (real screen renderers, seeded in-memory data, simulated camera). 53 screens × light/dark × default/large text = 212 captures live in `docs/screens/`.*
-
 ## Tools, harnesses, and models — and what each one bought us
 
 **Product stack**
