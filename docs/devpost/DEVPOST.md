@@ -5,7 +5,7 @@
 
 # Nudge — call the people you love when you're both actually free
 
-![How Nudge fits together](IMG_ARCH)
+![How Nudge fits together](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/nudge-architecture.png)
 
 ## The challenge and who it's for
 
@@ -21,7 +21,7 @@ Nudge removes the three things that stop a call from happening, and it does it w
 2. **It makes the call better.** During the video call, when you say *"remember the hike last weekend?"* the photo appears in your own mini window with an **Ask first** card. Tap Show and it's on Mom's screen. Conversations stop being "how are you… fine" and become show-and-tell.
 3. **It carries the thread.** Afterwards Nudge writes a short summary you both can see and delete. Topics with follow-ups ("physics exam Thursday") seed the *next* nudge: *"Want to ask Mom how the exam went?"*
 
-![The Nudge loop](IMG_LOOP)
+![The Nudge loop](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/nudge-loop.png)
 
 Every one of those steps is opt-in and symmetric — nothing happens to the other person without their acceptance. That's the point: the app is a good friend who says "you're both free, want me to connect you?", not a machine that guilt-trips you.
 
@@ -34,7 +34,7 @@ Nudge's core feature — *photos that appear because you mentioned them* — is 
 - **Amazon S3 Vectors** stores those embeddings and answers each query scoped to *the speaker's own photos only*.
 - **Amazon Rekognition + Nova** gate what ever gets indexed: moderation labels, OCR for documents/IDs/screenshots, and a Nova "is this sensitive?" pass. 9/9 sensitive fixtures were excluded; 0/7 benign ones wrongly excluded.
 
-![Sequence: a spoken memory becomes a shared photo](IMG_SEQ)
+![Sequence: a spoken memory becomes a shared photo](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/nudge-photo-sequence.png)
 
 We measured it rather than hoped: the detector scores **precision 1.000 / recall 0.896** on a 140-window eval set with **0/30 hard-negative false positives**, retrieval is **top-1 1.000** on a 60-photo CC0 set, and end-to-end transcript → suggestion runs at **~1.0 s p50** against the deployed stack.
 
@@ -51,10 +51,10 @@ Most "stay in touch" apps are reminder lists or streak counters. Nudge is differ
 
 ## Screens
 
-![Nudge → call](IMG_S1)
-![Photos in the call](IMG_S2)
-![Memory and follow-up](IMG_S3)
-![Friends and privacy](IMG_S4)
+![Nudge → call](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/01-nudge-to-call.jpg)
+![Photos in the call](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/02-photos-in-call.jpg)
+![Memory and follow-up](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/03-memory-followup.jpg)
+![Friends and privacy](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/04-friends-privacy.jpg)
 
 *All screens are captured from the real SwiftUI app running in the iOS Simulator via its built-in screenshot mode (real screen renderers, seeded in-memory data, simulated camera). 53 screens × light/dark × default/large text = 212 captures live in `docs/screens/`.*
 
