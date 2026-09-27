@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nudge — low commitment vs. scheduling</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #FBF8F4; --ink: #1F2330; --accent: #6052BD; --accent-tint: rgba(96,82,189,0.10);
+      --muted: #5B6172; --soft: #7C8291; --warn: #B4553A; --warn-tint: rgba(180,85,58,0.08);
+      --sans: 'Geist', sans-serif; --mono: 'Geist Mono', monospace; --serif: 'Instrument Serif', serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--paper); color: var(--ink); font-family: var(--sans); padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    header { width: 100%; max-width: 1040px; }
+    .eyebrow { font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    h1 { font: 400 30px var(--serif); margin-top: 6px; }
+    h1 em { font-style: italic; color: var(--accent); }
+    .diagram { width: 100%; max-width: 1040px; }
+    svg { width: 100%; height: auto; display: block; }
+    .lane { fill: none; stroke: var(--soft); stroke-width: 1; stroke-dasharray: 4 4; }
+    .lane-title { fill: var(--ink); font: 600 13px var(--sans); }
+    .lane-sub { fill: var(--muted); font: 400 9px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+    .flow { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+    .flow.warn { stroke: var(--warn); }
+    .flow.good { stroke: var(--accent); }
+    .step { fill: var(--paper); stroke: var(--ink); stroke-width: 1; }
+    .step.warn { fill: var(--warn-tint); stroke: var(--warn); }
+    .step.good { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.2; }
+    .step.dead { fill: none; stroke: var(--warn); stroke-dasharray: 3 3; }
+    .name { fill: var(--ink); font: 600 12px var(--sans); text-anchor: middle; }
+    .name.warn { fill: var(--warn); }
+    .name.good { fill: var(--accent); }
+    .sub { fill: var(--muted); font: 400 8px var(--mono); text-anchor: middle; }
+    .edge { fill: var(--soft); font: 400 8px var(--mono); letter-spacing: 0.06em; text-anchor: middle; }
+    .edge.warn { fill: var(--warn); }
+    .edge.good { fill: var(--accent); }
+    .debt { fill: var(--warn); font: 500 9px var(--mono); letter-spacing: 0.08em; text-anchor: middle; }
+    .zero { fill: var(--accent); font: 500 9px var(--mono); letter-spacing: 0.08em; text-anchor: middle; }
+    .callout { fill: var(--ink); font: 400 15px var(--serif); font-style: italic; text-anchor: middle; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">Nudge · why people keep using it</div>
+    <h1>Scheduling is a promise. A nudge is just a <em>yes right now</em>.</h1>
+  </header>
+  <div class="diagram">
+    <svg viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="cmp-title cmp-desc">
+      <title id="cmp-title">Scheduling an event versus receiving a nudge</title>
+      <desc id="cmp-desc">Two horizontal lanes. The top lane, scheduling, is a six-step chain: propose a time, negotiate, put it on the calendar, wait for days, feel obligated, then reschedule or skip, and each step adds commitment debt so the app is eventually abandoned. The bottom lane, a nudge, has three steps: both calendars happen to be free right now, one tap to accept or skip, and a call. Nothing is booked and nobody is let down, so people keep using it.</desc>
+      <defs>
+        <pattern id="cmp-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(31,35,48,0.10)"/></pattern>
+        <marker id="cmp-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5B6172"/></marker>
+        <marker id="cmp-arrow-warn" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#B4553A"/></marker>
+        <marker id="cmp-arrow-good" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6052BD"/></marker>
+      </defs>
+      <rect width="1040" height="560" fill="#FBF8F4"/>
+      <rect width="1040" height="560" fill="url(#cmp-dots)" opacity="0.55"/>
+
+      <!-- Lane 1: scheduling -->
+      <rect class="lane" x="40" y="40" width="960" height="220" rx="8"/>
+      <text x="56" y="66" class="lane-sub">Most apps · schedule an event</text>
+      <text x="56" y="86" class="lane-title">High commitment: you owe your future self and theirs</text>
+
+      <rect class="step" x="56" y="120" width="132" height="60" rx="6"/>
+      <text x="122" y="146" class="name">Propose a time</text><text x="122" y="164" class="sub">"free Thursday?"</text>
+
+      <rect class="step" x="212" y="120" width="132" height="60" rx="6"/>
+      <text x="278" y="146" class="name">Negotiate</text><text x="278" y="164" class="sub">"7 is late… 8?"</text>
+
+      <rect class="step" x="368" y="120" width="132" height="60" rx="6"/>
+      <text x="434" y="146" class="name">Book it</text><text x="434" y="164" class="sub">on both calendars</text>
+
+      <rect class="step warn" x="524" y="120" width="132" height="60" rx="6"/>
+      <text x="590" y="146" class="name warn">Wait days</text><text x="590" y="164" class="sub">life changes in between</text>
+
+      <rect class="step warn" x="680" y="120" width="132" height="60" rx="6"/>
+      <text x="746" y="146" class="name warn">Feel obligated</text><text x="746" y="164" class="sub">"ugh, I said I would"</text>
+
+      <rect class="step dead" x="836" y="120" width="148" height="60" rx="6"/>
+      <text x="910" y="146" class="name warn">Move · skip · delete</text><text x="910" y="164" class="sub">the app becomes a chore</text>
+
+      <path class="flow" d="M188 150 H210" marker-end="url(#cmp-arrow)"/>
+      <path class="flow" d="M344 150 H366" marker-end="url(#cmp-arrow)"/>
+      <path class="flow" d="M500 150 H522" marker-end="url(#cmp-arrow)"/>
+      <path class="flow warn" d="M656 150 H678" marker-end="url(#cmp-arrow-warn)"/>
+      <path class="flow warn" d="M812 150 H834" marker-end="url(#cmp-arrow-warn)"/>
+
+      <!-- commitment debt bar -->
+      <path class="flow warn" d="M56 214 H984" marker-end="url(#cmp-arrow-warn)"/>
+      <text x="122" y="236" class="debt">COMMITMENT DEBT ↑</text>
+      <text x="910" y="236" class="debt">DROP-OFF</text>
+
+      <!-- Lane 2: nudge -->
+      <rect class="lane" x="40" y="290" width="960" height="220" rx="8"/>
+      <text x="56" y="316" class="lane-sub">Nudge · nothing is ever scheduled</text>
+      <text x="56" y="336" class="lane-title">Low friction, low commitment: a yes costs nothing, a no costs nothing</text>
+
+      <rect class="step" x="56" y="370" width="200" height="60" rx="6"/>
+      <text x="156" y="396" class="name">Both free right now</text><text x="156" y="414" class="sub">free/busy overlap · no titles shared</text>
+
+      <rect class="step" x="316" y="370" width="200" height="60" rx="6"/>
+      <text x="416" y="396" class="name">One tap</text><text x="416" y="414" class="sub">accept · or skip, no explanation</text>
+
+      <rect class="step good" x="576" y="370" width="200" height="60" rx="6"/>
+      <text x="676" y="396" class="name good">The call</text><text x="676" y="414" class="sub">1:1 video · happens or it doesn't</text>
+
+      <path class="flow good" d="M256 400 H314" marker-end="url(#cmp-arrow-good)"/>
+      <rect x="262" y="384" width="48" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="286" y="393" class="edge good">DETECTED</text>
+      <path class="flow good" d="M516 400 H574" marker-end="url(#cmp-arrow-good)"/>
+      <rect x="518" y="384" width="54" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="545" y="393" class="edge good">BOTH YES</text>
+
+      <!-- skip returns to waiting -->
+      <path class="flow" d="M416 430 V450 H156 V432" marker-end="url(#cmp-arrow)"/>
+      <rect x="216" y="444" width="140" height="12" rx="2" fill="#FBF8F4"/>
+      <text x="286" y="453" class="edge">EITHER SKIPS · NOTHING OWED</text>
+
+      <!-- zero debt bar -->
+      <path class="flow good" d="M56 480 H984" marker-end="url(#cmp-arrow-good)"/>
+      <text x="122" y="500" class="zero">COMMITMENT DEBT = 0</text>
+      <text x="880" y="500" class="zero">KEEPS GETTING USED</text>
+
+      <text x="880" y="410" class="callout">nobody was let down</text>
+    </svg>
+  </div>
+</body>
+</html>

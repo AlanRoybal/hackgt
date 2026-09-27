@@ -44,6 +44,8 @@ Where AI *isn't* the answer we didn't force it: free-time matching is determinis
 
 Most "stay in touch" apps take one of two shapes: reminder lists / streak counters, or **scheduling** — put a call on the calendar for Thursday at 7. Scheduling sounds responsible, but it is a *high-commitment* act: you are promising your future self and someone else's future self, and people quietly resent and abandon those promises (the event gets moved, then skipped, then the app gets deleted). Nudge is deliberately **low-friction and low-commitment**: nothing is ever scheduled. It waits until you are *both* free right now, asks each of you with a single tap, and if either says "not now" nothing happened and nobody was let down. Because saying yes costs nothing and saying no costs nothing, people keep using it — the app never becomes a chore you owe someone.
 
+![Scheduling is a promise; a nudge is just a yes right now](https://raw.githubusercontent.com/AlanRoybal/hackgt/devin/1790489781-devpost-assets/docs/devpost/nudge-vs-scheduling.png)
+
 Beyond that, Nudge is different in four concrete ways:
 
 - **Mutual availability, not reminders.** Both calendars have to be free; both people have to accept. Nobody is ever "reminded" to bother someone who is busy.
